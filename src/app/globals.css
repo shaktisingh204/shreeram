@@ -47,14 +47,14 @@ body {
     --chart-5: 330 70% 50%;
 
     /* Sidebar specific theme variables */
-    --sidebar-background: 270 50% 35%; /* Slightly darker indigo for sidebar */
-    --sidebar-foreground: 270 50% 90%; /* Light indigo for sidebar text */
-    --sidebar-primary: 180 100% 30%; /* Teal as primary in sidebar */
-    --sidebar-primary-foreground: 180 100% 95%; /* Light Teal for text on sidebar primary */
-    --sidebar-accent: 270 50% 45%; /* Brighter indigo for sidebar accent */
-    --sidebar-accent-foreground: 270 50% 98%; /* Very light indigo for text on sidebar accent */
-    --sidebar-border: 270 50% 30%; /* Darker Indigo for sidebar borders */
-    --sidebar-ring: 180 100% 30%; /* Teal for sidebar focus rings */
+    --sidebar-background: 0 0% 100%; /* White */
+    --sidebar-foreground: 270 5% 20%; /* Dark Gray for text/icons */
+    --sidebar-primary: 180 100% 25.1%; /* Teal - for logo icon */
+    --sidebar-primary-foreground: 180 100% 90%; /* Light Teal for text on sidebar primary */
+    --sidebar-accent: 270 50% 40%; /* Deep Indigo (app primary) for active/hover background */
+    --sidebar-accent-foreground: 0 0% 100%; /* White for active/hover text */
+    --sidebar-border: 0 0% 85.8%; /* Light gray border */
+    --sidebar-ring: 270 50% 40%; /* Deep Indigo for sidebar focus rings */
   }
 
   .dark {
