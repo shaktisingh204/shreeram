@@ -1,18 +1,72 @@
 
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Save } from "lucide-react";
+import { Save, Loader2 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 export default function SettingsPage() {
-  // Mock settings state
-  // In a real app, these would come from user preferences or backend
-  // and a form submission would update them.
+  const { updateAdminPassword } = useAuth();
+  const { toast } = useToast();
+
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Passwords do not match.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast({
+        title: "Error",
+        description: "Password must be at least 6 characters long.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const success = await updateAdminPassword(newPassword);
+      if (success) {
+        toast({
+          title: "Success",
+          description: "Admin password updated successfully.",
+        });
+        setNewPassword("");
+        setConfirmPassword("");
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to update password. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: (error as Error).message || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
 
   return (
     <div className="space-y-6">
@@ -21,26 +75,42 @@ export default function SettingsPage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Account Settings</CardTitle>
-          <CardDescription>Change your admin account settings.</CardDescription>
+          <CardDescription>Manage your admin account settings.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="adminEmail">Admin Email</Label>
             <Input id="adminEmail" type="email" defaultValue="admin@seatsmart.com" disabled />
-            <p className="text-sm text-muted-foreground">Email cannot be changed in this demo.</p>
+             <p className="text-sm text-muted-foreground">Admin email is used for display purposes.</p>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="newPassword">New Password</Label>
-            <Input id="newPassword" type="password" placeholder="Enter new password" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm New Password</Label>
-            <Input id="confirmPassword" type="password" placeholder="Confirm new password" />
-          </div>
-          <Button disabled> {/* Disabled for demo */}
-            <Save className="mr-2 h-4 w-4"/>
-            Update Password
-          </Button>
+          <form onSubmit={handlePasswordUpdate} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New Password</Label>
+              <Input 
+                id="newPassword" 
+                type="password" 
+                placeholder="Enter new password" 
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm New Password</Label>
+              <Input 
+                id="confirmPassword" 
+                type="password" 
+                placeholder="Confirm new password" 
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+            </div>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4"/>}
+              Update Password
+            </Button>
+          </form>
         </CardContent>
       </Card>
       
@@ -58,6 +128,7 @@ export default function SettingsPage() {
               <p className="text-sm text-muted-foreground">Get email updates for key events.</p>
             </div>
             <Switch id="emailNotifications" defaultChecked disabled />
+             <p className="text-xs text-muted-foreground"> (Feature not implemented)</p>
           </div>
           <div className="flex items-center justify-between">
             <div>
@@ -65,6 +136,7 @@ export default function SettingsPage() {
               <p className="text-sm text-muted-foreground">Get reminders for student fee deadlines.</p>
             </div>
             <Switch id="feesDueReminders" defaultChecked disabled />
+             <p className="text-xs text-muted-foreground"> (Feature not implemented)</p>
           </div>
         </CardContent>
       </Card>
@@ -78,19 +150,6 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
            <p className="text-sm text-muted-foreground">Theme customization is currently managed globally. Dark mode can be toggled via browser/OS settings if configured in `globals.css` and `tailwind.config.ts`.</p>
-           {/* Example for a manual theme toggle if implemented:
-           <div className="flex items-center justify-between">
-            <Label htmlFor="darkMode">Dark Mode</Label>
-            <Switch id="darkMode" onCheckedChange={(checked) => {
-              // This would typically call a context function to toggle theme
-              if (checked) {
-                document.documentElement.classList.add('dark');
-              } else {
-                document.documentElement.classList.remove('dark');
-              }
-            }}/>
-          </div>
-          */}
         </CardContent>
       </Card>
     </div>

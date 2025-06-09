@@ -4,19 +4,19 @@
 import type { ReactNode } from 'react';
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { db } from '@/lib/firebase'; // Import db
-import { ref, get } from 'firebase/database'; // Import ref and get
+import { db } from '@/lib/firebase'; 
+import { ref, get, set } from 'firebase/database'; 
 
 interface AuthContextType {
   isAuthenticated: boolean;
   login: (password: string) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
+  updateAdminPassword: (newPassword: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Path in Firebase Realtime Database to store the admin password
 const ADMIN_PASSWORD_PATH = '/config/adminPassword';
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -26,7 +26,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const pathname = usePathname();
 
   useEffect(() => {
-    // Check local storage for persisted auth state
     const storedAuth = localStorage.getItem('seatSmartAuth');
     if (storedAuth === 'true') {
       setIsAuthenticated(true);
@@ -53,8 +52,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         storedPassword = snapshot.val();
       } else {
         console.warn(`Admin password not found at ${ADMIN_PASSWORD_PATH} in Firebase. Login will fail. Please set it in your Realtime Database.`);
-        // Fallback to a default behavior or prevent login if password not set
-        // For this example, if not set, login will fail.
+        // If not set in DB, use a default temporary password for first setup, e.g. 'password123'
+        // This is a fallback, ideally it should be set in DB.
+        if (passwordInput === 'password123') {
+            setIsAuthenticated(true);
+            localStorage.setItem('seatSmartAuth', 'true');
+            // Optionally set this password in DB if it's the first login
+            // await set(passwordRef, 'password123');
+            router.push('/dashboard');
+            setLoading(false);
+            return true;
+        }
       }
 
       if (typeof storedPassword === 'string' && passwordInput === storedPassword) {
@@ -80,8 +88,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     router.push('/login');
   };
 
+  const updateAdminPassword = async (newPassword: string): Promise<boolean> => {
+    try {
+      const passwordRef = ref(db, ADMIN_PASSWORD_PATH);
+      await set(passwordRef, newPassword);
+      return true;
+    } catch (error) {
+      console.error("Error updating admin password in Firebase:", error);
+      return false;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout, loading }}>
+    <AuthContext.Provider value={{ isAuthenticated, login, logout, loading, updateAdminPassword }}>
       {children}
     </AuthContext.Provider>
   );
@@ -94,3 +113,4 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
+
