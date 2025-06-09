@@ -3,27 +3,45 @@
 
 import * as admin from 'firebase-admin';
 import { z } from 'zod';
-import { getLibrariesMetadata } from '@/lib/data'; // To fetch library name
+import { getLibrariesMetadata } from '@/lib/data'; 
 import type { UserMetadata } from '@/types';
 
-// Helper to initialize Firebase Admin SDK only once
-if (!admin.apps.length) {
-  try {
-    console.log("Initializing Firebase Admin SDK...");
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      }),
-      databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
-    });
-    console.log("Firebase Admin SDK initialized successfully.");
-  } catch (error) {
-    console.error('Firebase Admin SDK initialization error:', error);
-    // Consider how to handle this error more gracefully in a real app
+// Function to initialize Firebase Admin SDK if not already initialized
+function ensureFirebaseAdminInitialized() {
+  if (admin.apps.length === 0) {
+    console.log("ensureFirebaseAdminInitialized: No Firebase Admin app detected. Attempting to initialize.");
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    const databaseURL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
+
+    if (!projectId || !clientEmail || !privateKey || !databaseURL) {
+      console.error("ensureFirebaseAdminInitialized: CRITICAL - Missing one or more environment variables for Firebase Admin SDK initialization.");
+      console.error(`Env Var Status - FIREBASE_PROJECT_ID: ${!!projectId}, FIREBASE_CLIENT_EMAIL: ${!!clientEmail}, FIREBASE_PRIVATE_KEY: ${!!privateKey}, NEXT_PUBLIC_FIREBASE_DATABASE_URL: ${!!databaseURL}`);
+      throw new Error("Server configuration error: Missing Firebase Admin credentials. Please check server logs and environment variable setup.");
+    }
+
+    try {
+      console.log("ensureFirebaseAdminInitialized: Initializing with provided credentials...");
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId,
+          clientEmail,
+          privateKey: privateKey.replace(/\\n/g, '\n'),
+        }),
+        databaseURL,
+      });
+      console.log("ensureFirebaseAdminInitialized: Firebase Admin SDK initialized successfully in this context.");
+    } catch (error: any) {
+      console.error('ensureFirebaseAdminInitialized: Firebase Admin SDK initialization FAILED.', error.message, error.stack);
+      // Re-throw the error to be caught by the action's main try-catch
+      throw new Error(`Firebase Admin SDK failed to initialize: ${error.message}`);
+    }
+  } else {
+    console.log("ensureFirebaseAdminInitialized: Firebase Admin SDK already initialized. Apps count:", admin.apps.length);
   }
 }
+
 
 const CreateManagerSchema = z.object({
   email: z.string().email({ message: "Valid email is required." }),
@@ -32,51 +50,52 @@ const CreateManagerSchema = z.object({
   mobileNumber: z.string().optional().or(z.literal('')).refine(val => !val || /^\d{10}$/.test(val), {
     message: "Mobile number must be 10 digits if provided.",
   }),
-  role: z.literal("manager"), // This action is specifically for creating managers
+  role: z.literal("manager"), 
   assignedLibraryId: z.string().min(1, {message: "A library must be assigned."}),
 });
 
 export type CreateManagerFormValues = z.infer<typeof CreateManagerSchema>;
 
 export async function createManagerAction(values: CreateManagerFormValues): Promise<{ success: boolean; message: string; userId?: string }> {
-  console.log("createManagerAction called with values:", JSON.stringify(values, null, 2));
+  console.log("createManagerAction: Called with values:", JSON.stringify(values, null, 2));
+
+  try {
+    // Ensure Firebase Admin is initialized before any Firebase Admin operations
+    ensureFirebaseAdminInitialized();
+  } catch (initError: any) {
+    // This catch block will now receive more specific errors from ensureFirebaseAdminInitialized
+    console.error("createManagerAction: Firebase Admin initialization process failed.", initError.message);
+    return { success: false, message: initError.message }; 
+  }
 
   const validation = CreateManagerSchema.safeParse(values);
   if (!validation.success) {
     const errorMessage = validation.error.errors.map(e => e.message).join(', ');
-    console.error("Validation failed:", errorMessage);
+    console.error("createManagerAction: Validation failed:", errorMessage);
     return { success: false, message: errorMessage };
   }
 
   const { email, password, displayName, mobileNumber, assignedLibraryId, role } = validation.data;
 
   try {
-    // 1. Create user in Firebase Authentication
-    console.log(`Attempting to create user in Firebase Auth for email: ${email}`);
+    // At this point, admin SDK should be initialized.
+    console.log(`createManagerAction: Attempting to create user in Firebase Auth for email: ${email}`);
     const userRecord = await admin.auth().createUser({
       email,
       password,
       displayName,
-      disabled: false, // Ensure user is enabled
+      disabled: false, 
     });
     const uid = userRecord.uid;
-    console.log(`User created successfully in Firebase Auth. UID: ${uid}`);
-
-    // 2. Get library name for metadata
-    console.log(`Fetching library metadata for assignedLibraryId: ${assignedLibraryId}`);
-    const libraries = await getLibrariesMetadata(); // This uses client SDK, ensure it can be called server-side or adapt.
-                                                 // For this context, getLibrariesMetadata still uses the client SDK for RTDB access.
-                                                 // A more robust solution for server actions would be to also have an admin-sdk version of getLibrariesMetadata.
-                                                 // However, for now, we assume this part is okay or can be temporarily hardcoded if an issue.
-                                                 // Or, simpler: just store ID, client can fetch name.
-                                                 // Let's assume the client will fetch the name for display based on ID for now.
+    console.log(`createManagerAction: User created successfully in Firebase Auth. UID: ${uid}`);
+    
+    console.log(`createManagerAction: Fetching library metadata for assignedLibraryId: ${assignedLibraryId}`);
+    const libraries = await getLibrariesMetadata();
     
     const library = libraries.find(lib => lib.id === assignedLibraryId);
-    const libraryName = library?.name || "Unknown Library";
-    console.log(`Library found: ${libraryName} (ID: ${assignedLibraryId})`);
+    const libraryName = library?.name || "Unknown Library"; // Default if library not found
+    console.log(`createManagerAction: Library found: ${libraryName} (ID: ${assignedLibraryId})`);
 
-
-    // 3. Create user metadata in Realtime Database
     const userMetadata: UserMetadata = {
       id: uid,
       email,
@@ -86,26 +105,29 @@ export async function createManagerAction(values: CreateManagerFormValues): Prom
       assignedLibraryId,
       assignedLibraryName: libraryName,
     };
-    console.log(`Attempting to set user metadata in RTDB for UID ${uid}:`, JSON.stringify(userMetadata, null, 2));
+    console.log(`createManagerAction: Attempting to set user metadata in RTDB for UID ${uid}:`, JSON.stringify(userMetadata, null, 2));
 
     await admin.database().ref(`users_metadata/${uid}`).set(userMetadata);
-    console.log(`User metadata set successfully in RTDB for UID ${uid}.`);
+    console.log(`createManagerAction: User metadata set successfully in RTDB for UID ${uid}.`);
 
     return { success: true, message: `Manager ${displayName} created successfully.`, userId: uid };
 
   } catch (error: any) {
-    console.error("Error in createManagerAction:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+    // This will catch errors from admin.auth().createUser() or admin.database().ref().set()
+    console.error("createManagerAction: Error during Firebase operation:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
     
-    // Handle Firebase specific errors
     let errorMessage = "Failed to create manager.";
     if (error.code === 'auth/email-already-exists') {
       errorMessage = "This email address is already in use by another account.";
     } else if (error.code === 'auth/invalid-password') {
       errorMessage = "The password must be a string with at least six characters.";
+    } else if (error.code === 'auth/sdk-create-user-failed-credential-already-in-use') { // More specific error
+      errorMessage = "This email address is already in use by another account.";
+    } else if (error.code) { 
+        errorMessage = `Firebase error (${error.code}): ${error.message}`;
     } else if (error.message) {
       errorMessage = error.message;
     }
     return { success: false, message: errorMessage };
   }
 }
-
