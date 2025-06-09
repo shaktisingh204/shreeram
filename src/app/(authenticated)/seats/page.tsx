@@ -6,7 +6,7 @@ import { getSeats, assignSeat as assignSeatAction, unassignSeat as unassignSeatA
 import type { Seat, Student } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Armchair, UserX, UserCheck, Loader2, PlusCircle, Edit, Trash2, MoreHorizontal, AlertTriangle } from 'lucide-react';
+import { Armchair, UserX, UserCheck, Loader2, PlusCircle, Edit, Trash2, MoreHorizontal, AlertTriangle, Library } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -44,7 +44,7 @@ import { useRouter } from 'next/navigation';
 
 
 export default function SeatsPage() {
-  const { currentLibraryId, loading: authLoading } = useAuth();
+  const { currentLibraryId, currentLibraryName, loading: authLoading } = useAuth();
   const router = useRouter();
   const [allSeats, setAllSeats] = useState<Seat[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -82,7 +82,7 @@ export default function SeatsPage() {
       setAllSeats(seatData);
       setStudents(studentData.filter(s => s.status !== 'inactive'));
     } catch (error) {
-        toast({ title: "Error", description: "Failed to fetch seat or student data.", variant: "destructive" });
+        toast({ title: "Error", description: `Failed to fetch seat or student data for ${currentLibraryName || 'the current library'}. ${(error as Error).message}`, variant: "destructive" });
         setAllSeats([]);
         setStudents([]);
     } finally {
@@ -92,7 +92,7 @@ export default function SeatsPage() {
 
   useEffect(() => {
     fetchAllData();
-  }, [currentLibraryId, authLoading]);
+  }, [currentLibraryId, authLoading]); // currentLibraryId ensures re-fetch on context switch
 
   const seatsByFloor = useMemo(() => {
     return allSeats.reduce((acc, seat) => {
@@ -119,11 +119,11 @@ export default function SeatsPage() {
     setIsSubmitting(true);
     try {
       await assignSeatAction(currentLibraryId, selectedStudentIdForAssignment, selectedSeatForAssignment.id);
-      toast({ title: "Success", description: `Seat ${selectedSeatForAssignment.seatNumber} (${selectedSeatForAssignment.floor}) assigned.` });
+      toast({ title: "Success", description: `Seat ${selectedSeatForAssignment.seatNumber} (${selectedSeatForAssignment.floor}) assigned in ${currentLibraryName}.` });
       await fetchAllData();
       setIsAssignDialogOpen(false);
     } catch (error) {
-      toast({ title: "Error", description: (error as Error).message || "Failed to assign seat.", variant: "destructive" });
+      toast({ title: "Error", description: (error as Error).message || `Failed to assign seat in ${currentLibraryName}.`, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -137,11 +137,11 @@ export default function SeatsPage() {
     setIsSubmitting(true);
     try {
       await unassignSeatAction(currentLibraryId, selectedSeatForAssignment.id);
-      toast({ title: "Success", description: `Seat ${selectedSeatForAssignment.seatNumber} (${selectedSeatForAssignment.floor}) is now empty.` });
+      toast({ title: "Success", description: `Seat ${selectedSeatForAssignment.seatNumber} (${selectedSeatForAssignment.floor}) in ${currentLibraryName} is now empty.` });
       await fetchAllData();
       setIsAssignDialogOpen(false);
     } catch (error) {
-        toast({ title: "Error", description: (error as Error).message || "Failed to make seat empty.", variant: "destructive" });
+        toast({ title: "Error", description: (error as Error).message || `Failed to make seat empty in ${currentLibraryName}.`, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -160,20 +160,23 @@ export default function SeatsPage() {
   };
 
   const handleSeatFormSubmit = async (values: SeatFormValues) => {
-    if (!currentLibraryId) return;
+    if (!currentLibraryId) {
+        toast({ title: "Error", description: "No library selected to save the seat.", variant: "destructive" });
+        return;
+    }
     setIsSubmitting(true);
     try {
       if (seatFormDialogMode === 'edit' && editingSeat) {
         await updateSeatDetails(currentLibraryId, editingSeat.id, values);
-        toast({ title: "Success", description: "Seat updated successfully." });
+        toast({ title: "Success", description: `Seat updated successfully in ${currentLibraryName}.` });
       } else {
         await addSeat(currentLibraryId, values);
-        toast({ title: "Success", description: "Seat added successfully." });
+        toast({ title: "Success", description: `Seat added successfully to ${currentLibraryName}.` });
       }
       await fetchAllData();
       setIsSeatFormOpen(false);
     } catch (error) {
-      toast({ title: "Error", description: (error as Error).message || "Failed to save seat.", variant: "destructive" });
+      toast({ title: "Error", description: (error as Error).message || `Failed to save seat in ${currentLibraryName}.`, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -189,12 +192,12 @@ export default function SeatsPage() {
     setIsSubmitting(true);
     try {
       await deleteSeatAction(currentLibraryId, seatToDelete.id);
-      toast({ title: "Success", description: `Seat ${seatToDelete.seatNumber} (${seatToDelete.floor}) deleted.` });
+      toast({ title: "Success", description: `Seat ${seatToDelete.seatNumber} (${seatToDelete.floor}) deleted from ${currentLibraryName}.` });
       await fetchAllData();
       setIsDeleteConfirmOpen(false);
       setSeatToDelete(null);
     } catch (error) {
-      toast({ title: "Error", description: (error as Error).message || "Failed to delete seat.", variant: "destructive" });
+      toast({ title: "Error", description: (error as Error).message || `Failed to delete seat from ${currentLibraryName}.`, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -227,7 +230,10 @@ export default function SeatsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-headline font-bold text-primary">Seat Setup</h1>
+        <div>
+            <h1 className="text-3xl font-headline font-bold text-primary">Seat Setup</h1>
+            {currentLibraryName && <p className="text-md text-muted-foreground flex items-center"><Library className="h-4 w-4 mr-2 text-accent" />Managing seats for: <span className="font-semibold ml-1">{currentLibraryName}</span></p>}
+        </div>
         <div className="flex items-center gap-4">
            <Button onClick={openAddSeatDialog}>
             <PlusCircle className="mr-2 h-4 w-4" /> Add New Seat
@@ -305,14 +311,14 @@ export default function SeatsPage() {
       ) : (
         <Card className="shadow-xl">
             <CardHeader>
-                <CardTitle>No Seats Found</CardTitle>
+                <CardTitle>No Seats Found for {currentLibraryName || "Current Library"}</CardTitle>
                 <CardDescription>Start by adding floors and seats for this library.</CardDescription>
             </CardHeader>
             <CardContent className="text-center py-8">
                  <Armchair className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">No seats have been configured yet for this library.</p>
+                <p className="text-muted-foreground">No seats have been configured yet for {currentLibraryName || "this library"}.</p>
                 <Button className="mt-4" onClick={openAddSeatDialog}>
-                    <PlusCircle className="mr-2 h-4 w-4" /> Add First Seat
+                    <PlusCircle className="mr-2 h-4 w-4" /> Add First Seat to {currentLibraryName || "Library"}
                 </Button>
             </CardContent>
         </Card>
@@ -325,8 +331,8 @@ export default function SeatsPage() {
             <DialogTitle>Update Seat: {selectedSeatForAssignment?.seatNumber} ({selectedSeatForAssignment?.floor})</DialogTitle>
             <DialogDescription>
               {selectedSeatForAssignment?.isOccupied 
-                ? `This seat is taken by ${selectedSeatForAssignment.studentName}. You can assign it to someone else or make it empty.`
-                : `Choose a student for this seat.`}
+                ? `This seat in ${currentLibraryName} is taken by ${selectedSeatForAssignment.studentName}. You can assign it to someone else or make it empty.`
+                : `Choose a student for this seat in ${currentLibraryName}.`}
             </DialogDescription>
           </DialogHeader>
           
@@ -377,7 +383,7 @@ export default function SeatsPage() {
             <DialogHeader>
                 <DialogTitle>{seatFormDialogMode === 'edit' ? "Edit Seat" : "Add New Seat"}</DialogTitle>
                 <DialogDescription>
-                    {seatFormDialogMode === 'edit' ? "Modify the details of this seat." : "Add a new seat to the library."}
+                    {seatFormDialogMode === 'edit' ? `Modify the details of this seat in ${currentLibraryName}.` : `Add a new seat to ${currentLibraryName}.`}
                 </DialogDescription>
             </DialogHeader>
           <SeatForm 
@@ -398,7 +404,7 @@ export default function SeatsPage() {
                 <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                 <AlertDialogDescription>
                     This action cannot be undone. This will permanently delete seat 
-                    <span className="font-semibold"> {seatToDelete?.seatNumber} ({seatToDelete?.floor})</span>.
+                    <span className="font-semibold"> {seatToDelete?.seatNumber} ({seatToDelete?.floor})</span> from {currentLibraryName}.
                     {seatToDelete?.isOccupied && " The assigned student will also be unassigned."}
                 </AlertDialogDescription>
                 </AlertDialogHeader>
@@ -415,3 +421,6 @@ export default function SeatsPage() {
     </div>
   );
 }
+
+
+    
