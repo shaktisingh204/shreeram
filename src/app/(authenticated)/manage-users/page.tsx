@@ -12,8 +12,8 @@ import { UserForm, type UserFormValues } from './UserForm';
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useAuth } from '@/context/AuthContext'; // To ensure only superadmin can access
-
+import { useAuth } from '@/context/AuthContext';
+import { createManagerAction } from './actions';
 
 export default function ManageUsersPage() {
   const { isSuperAdmin, loading: authLoading } = useAuth();
@@ -22,6 +22,7 @@ export default function ManageUsersPage() {
   const [loadingData, setLoadingData] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserMetadata | undefined>(undefined);
+  const [formMode, setFormMode] = useState<'add' | 'edit'>('add');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
@@ -47,34 +48,52 @@ export default function ManageUsersPage() {
 
   const handleAddClick = () => {
     setEditingUser(undefined);
+    setFormMode('add');
     setIsFormOpen(true);
   };
 
   const handleEditClick = (user: UserMetadata) => {
     setEditingUser(user);
+    setFormMode('edit');
     setIsFormOpen(true);
   };
 
   const handleFormSubmit = async (values: UserFormValues) => {
     setIsSubmitting(true);
     try {
-      const library = libraries.find(lib => lib.id === values.assignedLibraryId);
-      const metadataToSet: Omit<UserMetadata, 'id'> = {
-        email: values.email,
-        displayName: values.displayName,
-        mobileNumber: values.mobileNumber || undefined,
-        role: "manager", // Form is for managers
-        assignedLibraryId: values.assignedLibraryId,
-        assignedLibraryName: library?.name || "Unknown Library",
-      };
-      
-      await setUserMetadata(values.id, metadataToSet);
-      toast({ title: "Success", description: `User ${values.displayName} ${editingUser ? 'updated' : 'added'} as manager.` });
+      if (formMode === 'edit' && editingUser) {
+        const library = libraries.find(lib => lib.id === values.assignedLibraryId);
+        const metadataToSet: Omit<UserMetadata, 'id'> = {
+          email: values.email,
+          displayName: values.displayName,
+          mobileNumber: values.mobileNumber || undefined,
+          role: "manager",
+          assignedLibraryId: values.assignedLibraryId,
+          assignedLibraryName: library?.name || "Unknown Library",
+        };
+        await setUserMetadata(editingUser.id, metadataToSet);
+        toast({ title: "Success", description: `Manager ${values.displayName} updated.` });
+      } else if (formMode === 'add') {
+        // Password is asserted to be present by the form's Zod schema for 'add' mode
+        const result = await createManagerAction({
+            email: values.email,
+            password: values.password!, 
+            displayName: values.displayName,
+            mobileNumber: values.mobileNumber,
+            role: "manager",
+            assignedLibraryId: values.assignedLibraryId,
+        });
+        if (result.success) {
+            toast({ title: "Success", description: result.message });
+        } else {
+            throw new Error(result.message);
+        }
+      }
       await fetchData();
       setIsFormOpen(false);
       setEditingUser(undefined);
     } catch (error) {
-      toast({ title: "Error", description: (error as Error).message || "Failed to save user metadata.", variant: "destructive" });
+      toast({ title: "Error", description: (error as Error).message || "Failed to save user.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -118,6 +137,7 @@ export default function ManageUsersPage() {
                 onSubmit={handleFormSubmit}
                 isSubmitting={isSubmitting}
                 onCancel={() => {setIsFormOpen(false); setEditingUser(undefined);}}
+                mode={formMode}
             />
         </DialogContent>
       </Dialog>
@@ -125,7 +145,7 @@ export default function ManageUsersPage() {
       <Card className="shadow-xl">
         <CardHeader>
             <CardTitle>User List</CardTitle>
-            <CardDescription>Manage user roles and library assignments. Users must be created in Firebase Authentication first.</CardDescription>
+            <CardDescription>Manage user roles and library assignments. Superadmin role is system-defined.</CardDescription>
         </CardHeader>
         <CardContent>
             {users.length > 0 ? (
@@ -153,9 +173,9 @@ export default function ManageUsersPage() {
                          {user.role}
                         </Badge>
                     </TableCell>
-                    <TableCell>{user.role === 'manager' ? getLibraryName(user.assignedLibraryId) : 'All (Superadmin)'}</TableCell>
+                    <TableCell>{user.role === 'manager' ? (user.assignedLibraryName || getLibraryName(user.assignedLibraryId)) : 'All (Superadmin)'}</TableCell>
                     <TableCell className="text-right">
-                        {user.role !== 'superadmin' && ( // Superadmin role cannot be edited via this form
+                        {user.role !== 'superadmin' && ( 
                              <Button variant="ghost" size="sm" onClick={() => handleEditClick(user)}>
                                 <Edit className="mr-2 h-4 w-4" /> Edit
                             </Button>

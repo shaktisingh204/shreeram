@@ -22,27 +22,49 @@ import type { LibraryMetadata, UserMetadata } from "@/types";
 import { useEffect, useState } from "react";
 import { getLibrariesMetadata } from "@/lib/data";
 
-const userFormSchema = z.object({
-  id: z.string().min(1, { message: "User ID (UID) from Firebase Auth is required." }),
+// Schema for editing existing user metadata (UID is present and not changed here)
+const editUserFormSchema = z.object({
+  id: z.string().min(1), // UID from Firebase Auth, present for editing
   email: z.string().email({ message: "Valid email is required." }),
   displayName: z.string().min(2, { message: "Full name must be at least 2 characters." }).max(100),
   mobileNumber: z.string().optional().or(z.literal('')).refine(val => val === '' || val === undefined || /^\d{10}$/.test(val), {
     message: "Mobile number must be 10 digits if provided.",
   }),
-  role: z.enum(["manager"]), // Superadmin is set manually or via different process
+  role: z.enum(["manager"]), 
   assignedLibraryId: z.string().min(1, {message: "A library must be assigned to a manager."}),
+  password: z.string().optional(), // Not used for edit, but part of unified form values
+  confirmPassword: z.string().optional(), // Not used for edit
 });
 
-export type UserFormValues = z.infer<typeof userFormSchema>;
+// Schema for adding a new manager (password is required)
+const addUserFormSchema = z.object({
+  id: z.string().optional(), // Not provided when adding
+  email: z.string().email({ message: "Valid email is required." }),
+  displayName: z.string().min(2, { message: "Full name must be at least 2 characters." }).max(100),
+  mobileNumber: z.string().optional().or(z.literal('')).refine(val => val === '' || val === undefined || /^\d{10}$/.test(val), {
+    message: "Mobile number must be 10 digits if provided.",
+  }),
+  role: z.enum(["manager"]),
+  assignedLibraryId: z.string().min(1, {message: "A library must be assigned to a manager."}),
+  password: z.string().min(6, { message: "Password must be at least 6 characters." }),
+  confirmPassword: z.string().min(6, { message: "Please confirm the password." }),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"], // path of error
+});
+
+
+export type UserFormValues = z.infer<typeof addUserFormSchema>; // Use the more comprehensive one for form state
 
 interface UserFormProps {
-  initialData?: UserMetadata; // For editing existing user metadata
+  initialData?: UserMetadata; 
   onSubmit: (values: UserFormValues) => Promise<void>;
   isSubmitting: boolean;
   onCancel: () => void;
+  mode: 'add' | 'edit';
 }
 
-export function UserForm({ initialData, onSubmit, isSubmitting, onCancel }: UserFormProps) {
+export function UserForm({ initialData, onSubmit, isSubmitting, onCancel, mode }: UserFormProps) {
   const [libraries, setLibraries] = useState<LibraryMetadata[]>([]);
 
   useEffect(() => {
@@ -54,21 +76,25 @@ export function UserForm({ initialData, onSubmit, isSubmitting, onCancel }: User
   }, []);
   
   const form = useForm<UserFormValues>({
-    resolver: zodResolver(userFormSchema),
+    resolver: zodResolver(mode === 'add' ? addUserFormSchema : editUserFormSchema),
     defaultValues: initialData ? {
         id: initialData.id,
         email: initialData.email,
         displayName: initialData.displayName || "",
         mobileNumber: initialData.mobileNumber || "",
-        role: "manager", // Form is for creating/editing managers
+        role: "manager", 
         assignedLibraryId: initialData.assignedLibraryId || "",
+        password: "", // Not relevant for edit
+        confirmPassword: "", // Not relevant for edit
     } : {
-      id: "",
+      id: "", // Will not be used for add
       email: "",
       displayName: "",
       mobileNumber: "",
       role: "manager",
       assignedLibraryId: "",
+      password: "",
+      confirmPassword: "",
     },
   });
 
@@ -76,26 +102,28 @@ export function UserForm({ initialData, onSubmit, isSubmitting, onCancel }: User
     <Card className="w-full max-w-lg mx-auto shadow-lg">
         <CardHeader>
             <CardTitle className="font-headline text-xl text-primary">
-            {initialData ? "Edit Manager Details" : "Add New Manager"}
+            {mode === 'edit' ? "Edit Manager Details" : "Add New Manager"}
             </CardTitle>
-            {!initialData && <FormDescription>First, create the user in Firebase Authentication console, then enter their UID here.</FormDescription>}
+            {mode === 'add' && <FormDescription>Create a new manager account and assign them to a library.</FormDescription>}
         </CardHeader>
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)}>
             <CardContent className="space-y-4">
-                <FormField
-                control={form.control}
-                name="id"
-                render={({ field }) => (
-                    <FormItem>
-                    <FormLabel>User ID (Firebase UID)</FormLabel>
-                    <FormControl>
-                        <Input placeholder="Enter UID from Firebase Auth" {...field} disabled={!!initialData} />
-                    </FormControl>
-                    <FormMessage />
-                    </FormItem>
+                {mode === 'edit' && initialData?.id && (
+                    <FormField
+                    control={form.control}
+                    name="id"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>User ID (Firebase UID)</FormLabel>
+                        <FormControl>
+                            <Input {...field} disabled />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
                 )}
-                />
                 <FormField
                 control={form.control}
                 name="email"
@@ -109,6 +137,36 @@ export function UserForm({ initialData, onSubmit, isSubmitting, onCancel }: User
                     </FormItem>
                 )}
                 />
+                {mode === 'add' && (
+                    <>
+                        <FormField
+                            control={form.control}
+                            name="password"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Initial Password</FormLabel>
+                                <FormControl>
+                                <Input type="password" placeholder="Enter initial password" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="confirmPassword"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Confirm Initial Password</FormLabel>
+                                <FormControl>
+                                <Input type="password" placeholder="Confirm initial password" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                    </>
+                )}
                 <FormField
                 control={form.control}
                 name="displayName"
@@ -166,7 +224,7 @@ export function UserForm({ initialData, onSubmit, isSubmitting, onCancel }: User
                         <FormItem className="hidden"> 
                         <FormLabel>Role</FormLabel>
                         <FormControl>
-                            <Input {...field} readOnly />
+                            <Input {...field} readOnly value="manager" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -179,7 +237,7 @@ export function UserForm({ initialData, onSubmit, isSubmitting, onCancel }: User
                 </Button>
                 <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {initialData ? "Save Changes" : "Add Manager"}
+                {mode === 'edit' ? "Save Changes" : "Add Manager"}
                 </Button>
             </CardFooter>
             </form>
