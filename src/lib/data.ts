@@ -81,28 +81,43 @@ export const addLibraryMetadata = async (name: string): Promise<LibraryMetadata>
 };
 
 // --- Library-Specific Data Operations ---
-// Helper to ensure libraryId is present for operations
-const ensureLibraryId = (libraryId: string | null): string => {
+// Helper to ensure libraryId is present for operations that *require* a single library context
+const ensureSingleLibraryId = (libraryId: string | null): string => {
   if (!libraryId) {
-    console.error("Attempted data operation without a libraryId context.");
-    throw new Error("Library context is not set. Cannot perform data operation.");
+    console.error("Attempted data operation requiring a single libraryId without one.");
+    throw new Error("A specific library context is required for this operation.");
   }
   return libraryId;
 };
 
 // Student Operations
-export const getStudents = async (libraryId: string): Promise<Student[]> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
-  const studentsRef = ref(db, `libraries/${currentLibraryId}/students`);
-  const snapshot = await get(studentsRef);
-  if (snapshot.exists()) {
-    return snapshotToAray<Student>(snapshot);
+export const getStudents = async (libraryId: string | null): Promise<Student[]> => {
+  if (libraryId === null) { // Superadmin "All Libraries" view
+    const allLibsMeta = await getLibrariesMetadata();
+    if (allLibsMeta.length === 0) return [];
+    let combinedStudents: Student[] = [];
+    for (const libMeta of allLibsMeta) {
+      const studentsRef = ref(db, `libraries/${libMeta.id}/students`);
+      const snapshot = await get(studentsRef);
+      if (snapshot.exists()) {
+        snapshot.forEach(childSnapshot => {
+          combinedStudents.push({ id: childSnapshot.key, ...childSnapshot.val() } as Student);
+        });
+      }
+    }
+    return combinedStudents;
+  } else {
+    const studentsRef = ref(db, `libraries/${libraryId}/students`);
+    const snapshot = await get(studentsRef);
+    if (snapshot.exists()) {
+      return snapshotToAray<Student>(snapshot);
+    }
+    return [];
   }
-  return [];
 };
 
 export const getStudentById = async (libraryId: string, studentId: string): Promise<Student | undefined> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId);
   const studentRef = ref(db, `libraries/${currentLibraryId}/students/${studentId}`);
   const snapshot = await get(studentRef);
   if (snapshot.exists()) {
@@ -128,7 +143,7 @@ interface StudentDataInput {
 }
 
 export const addStudent = async (libraryId: string, studentData: StudentDataInput): Promise<Student> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId);
   let finalPhotoUrl: string | undefined = undefined;
   if (typeof studentData.photo === 'string' && studentData.photo) {
     finalPhotoUrl = studentData.photo;
@@ -189,7 +204,7 @@ export const addStudent = async (libraryId: string, studentData: StudentDataInpu
 };
 
 export const updateStudent = async (libraryId: string, studentId: string, updatesIn: Partial<StudentDataInput>): Promise<Student | undefined> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId);
   const studentRef = ref(db, `libraries/${currentLibraryId}/students/${studentId}`);
   const studentSnapshot = await get(studentRef);
   if (!studentSnapshot.exists()) return undefined;
@@ -252,6 +267,7 @@ export const updateStudent = async (libraryId: string, studentId: string, update
         dbUpdates[`libraries/${currentLibraryId}/students/${studentId}/seatId`] = null; 
     }
   } else if (updatesIn.fullName && originalStudentData.seatId) {
+    // If only name changed, update studentName on existing seat
     dbUpdates[`libraries/${currentLibraryId}/seats/${originalStudentData.seatId}/studentName`] = updatedStudentData.fullName;
   }
   
@@ -260,32 +276,58 @@ export const updateStudent = async (libraryId: string, studentId: string, update
 };
 
 // Seat Operations
-export const getSeats = async (libraryId: string): Promise<Seat[]> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
-  const seatsRef = ref(db, `libraries/${currentLibraryId}/seats`);
-  const snapshot = await get(seatsRef);
-  if (snapshot.exists()) {
-    const seatsArray = snapshotToAray<Seat>(snapshot);
-    seatsArray.sort((a, b) => {
+export const getSeats = async (libraryId: string | null): Promise<Seat[]> => {
+  if (libraryId === null) { // Superadmin "All Libraries" view
+    const allLibsMeta = await getLibrariesMetadata();
+    if (allLibsMeta.length === 0) return [];
+    let combinedSeats: Seat[] = [];
+    for (const libMeta of allLibsMeta) {
+      const seatsRef = ref(db, `libraries/${libMeta.id}/seats`);
+      const snapshot = await get(seatsRef);
+      if (snapshot.exists()) {
+        snapshot.forEach(childSnapshot => {
+          combinedSeats.push({ id: childSnapshot.key, ...childSnapshot.val(), libraryName: libMeta.name } as Seat); // Add libraryName for context
+        });
+      }
+    }
+    combinedSeats.sort((a, b) => {
+        if ((a.libraryName || '') < (b.libraryName || '')) return -1;
+        if ((a.libraryName || '') > (b.libraryName || '')) return 1;
         if (a.floor < b.floor) return -1;
         if (a.floor > b.floor) return 1;
         const aNum = parseInt(a.seatNumber.replace(/[^0-9]/g, ''), 10);
         const bNum = parseInt(b.seatNumber.replace(/[^0-9]/g, ''), 10);
         const aPrefix = a.seatNumber.replace(/[0-9]/g, '');
         const bPrefix = b.seatNumber.replace(/[0-9]/g, '');
-
-        if (aPrefix === bPrefix && !isNaN(aNum) && !isNaN(bNum)) {
-            return aNum - bNum;
-        }
+        if (aPrefix === bPrefix && !isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
         return a.seatNumber.localeCompare(b.seatNumber);
     });
-    return seatsArray;
+    return combinedSeats;
+  } else {
+    const seatsRef = ref(db, `libraries/${libraryId}/seats`);
+    const snapshot = await get(seatsRef);
+    if (snapshot.exists()) {
+      const seatsArray = snapshotToAray<Seat>(snapshot);
+      seatsArray.sort((a, b) => {
+          if (a.floor < b.floor) return -1;
+          if (a.floor > b.floor) return 1;
+          const aNum = parseInt(a.seatNumber.replace(/[^0-9]/g, ''), 10);
+          const bNum = parseInt(b.seatNumber.replace(/[^0-9]/g, ''), 10);
+          const aPrefix = a.seatNumber.replace(/[0-9]/g, '');
+          const bPrefix = b.seatNumber.replace(/[0-9]/g, '');
+          if (aPrefix === bPrefix && !isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+          return a.seatNumber.localeCompare(b.seatNumber);
+      });
+      return seatsArray;
+    }
+    return [];
   }
-  return [];
 };
 
 export const getSeatById = async (libraryId: string, seatId: string): Promise<Seat | undefined> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
+  // This function might need adjustment if seatId is not unique across libraries
+  // Assuming seatId is unique in the context it's being called, or libraryId clarifies.
+  const currentLibraryId = ensureSingleLibraryId(libraryId);
   const seatRef = ref(db, `libraries/${currentLibraryId}/seats/${seatId}`);
   const snapshot = await get(seatRef);
   if (snapshot.exists()) {
@@ -295,7 +337,7 @@ export const getSeatById = async (libraryId: string, seatId: string): Promise<Se
 };
 
 export const addSeat = async (libraryId: string, seatData: { seatNumber: string; floor: string }): Promise<Seat> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId);
   const seatsQuery = query(ref(db, `libraries/${currentLibraryId}/seats`), orderByChild('floor'), equalTo(seatData.floor));
   const snapshot = await get(seatsQuery);
   if (snapshot.exists()) {
@@ -306,7 +348,7 @@ export const addSeat = async (libraryId: string, seatData: { seatNumber: string;
       }
     });
     if (seatExists) {
-      throw new Error(`Seat ${seatData.seatNumber} already exists on ${seatData.floor}.`);
+      throw new Error(`Seat ${seatData.seatNumber} already exists on ${seatData.floor} in this library.`);
     }
   }
 
@@ -325,7 +367,7 @@ export const addSeat = async (libraryId: string, seatData: { seatNumber: string;
 };
 
 export const updateSeatDetails = async (libraryId: string, seatId: string, updates: { seatNumber?: string; floor?: string }): Promise<Seat | undefined> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId);
   const seatRef = ref(db, `libraries/${currentLibraryId}/seats/${seatId}`);
   const seatSnapshot = await get(seatRef);
   if (!seatSnapshot.exists()) return undefined;
@@ -345,18 +387,18 @@ export const updateSeatDetails = async (libraryId: string, seatId: string, updat
             }
         });
         if (seatExists) {
-            throw new Error(`Another seat with number ${newSeatNumber} already exists on ${newFloor}.`);
+            throw new Error(`Another seat with number ${newSeatNumber} already exists on ${newFloor} in this library.`);
         }
     }
   }
 
   const finalUpdates = { ...currentSeat, ...updates };
-  await set(seatRef, finalUpdates); // Using set to overwrite with potentially partial updates
+  await set(seatRef, finalUpdates);
   return finalUpdates;
 };
 
 export const deleteSeat = async (libraryId: string, seatId: string): Promise<boolean> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId);
   const seatRef = ref(db, `libraries/${currentLibraryId}/seats/${seatId}`);
   const seatSnapshot = await get(seatRef);
   if (!seatSnapshot.exists()) return false;
@@ -373,7 +415,7 @@ export const deleteSeat = async (libraryId: string, seatId: string): Promise<boo
 };
 
 export const assignSeat = async (libraryId: string, studentId: string, newSeatId: string): Promise<boolean> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId);
   const studentRef = ref(db, `libraries/${currentLibraryId}/students/${studentId}`);
   const newSeatRef = ref(db, `libraries/${currentLibraryId}/seats/${newSeatId}`);
 
@@ -406,7 +448,7 @@ export const assignSeat = async (libraryId: string, studentId: string, newSeatId
 };
 
 export const unassignSeat = async (libraryId: string, seatId: string): Promise<boolean> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId);
   const seatRef = ref(db, `libraries/${currentLibraryId}/seats/${seatId}`);
   const seatSnapshot = await get(seatRef);
   if (!seatSnapshot.exists()) return false;
@@ -425,18 +467,34 @@ export const unassignSeat = async (libraryId: string, seatId: string): Promise<b
 };
 
 // Payment Type Operations
-export const getPaymentTypes = async (libraryId: string): Promise<PaymentType[]> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
-  const paymentTypesRef = ref(db, `libraries/${currentLibraryId}/paymentTypes`);
-  const snapshot = await get(paymentTypesRef);
-  if (snapshot.exists()) {
-    return snapshotToAray<PaymentType>(snapshot);
+export const getPaymentTypes = async (libraryId: string | null): Promise<PaymentType[]> => {
+  if (libraryId === null) { // Superadmin "All Libraries" view
+    const allLibsMeta = await getLibrariesMetadata();
+    if (allLibsMeta.length === 0) return [];
+    let combinedPaymentTypes: PaymentType[] = [];
+    for (const libMeta of allLibsMeta) {
+      const paymentTypesRef = ref(db, `libraries/${libMeta.id}/paymentTypes`);
+      const snapshot = await get(paymentTypesRef);
+      if (snapshot.exists()) {
+        snapshot.forEach(childSnapshot => {
+          combinedPaymentTypes.push({ id: childSnapshot.key, ...childSnapshot.val(), libraryName: libMeta.name } as PaymentType); // Add libraryName for context
+        });
+      }
+    }
+    return combinedPaymentTypes;
+  } else {
+    const paymentTypesRef = ref(db, `libraries/${libraryId}/paymentTypes`);
+    const snapshot = await get(paymentTypesRef);
+    if (snapshot.exists()) {
+      return snapshotToAray<PaymentType>(snapshot);
+    }
+    return [];
   }
-  return [];
 }
 
 export const getPaymentTypeById = async (libraryId: string, paymentTypeId: string): Promise<PaymentType | undefined> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
+  // Assuming paymentTypeId is unique in the context it's being called, or libraryId clarifies.
+  const currentLibraryId = ensureSingleLibraryId(libraryId);
   const ptRef = ref(db, `libraries/${currentLibraryId}/paymentTypes/${paymentTypeId}`);
   const snapshot = await get(ptRef);
   if (snapshot.exists()) {
@@ -446,7 +504,7 @@ export const getPaymentTypeById = async (libraryId: string, paymentTypeId: strin
 };
 
 export const addPaymentType = async (libraryId: string, planData: Omit<PaymentType, 'id'>): Promise<PaymentType> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId);
   const newPaymentTypeRef = push(ref(db, `libraries/${currentLibraryId}/paymentTypes`));
   const newId = newPaymentTypeRef.key;
   if (!newId) throw new Error("Failed to generate payment type ID.");
@@ -456,7 +514,7 @@ export const addPaymentType = async (libraryId: string, planData: Omit<PaymentTy
 }
 
 export const updatePaymentType = async (libraryId: string, paymentTypeId: string, updates: Partial<PaymentType>): Promise<PaymentType | undefined> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId);
   const ptRef = ref(db, `libraries/${currentLibraryId}/paymentTypes/${paymentTypeId}`);
   const snapshot = await get(ptRef);
   if (!snapshot.exists()) return undefined;
@@ -466,18 +524,34 @@ export const updatePaymentType = async (libraryId: string, paymentTypeId: string
 }
 
 // Fee Payment Operations
-export const getPayments = async (libraryId: string): Promise<FeePayment[]> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
-  const paymentsRef = ref(db, `libraries/${currentLibraryId}/payments`);
-  const snapshot = await get(paymentsRef);
-  if (snapshot.exists()) {
-    return snapshotToAray<FeePayment>(snapshot);
+export const getPayments = async (libraryId: string | null): Promise<FeePayment[]> => {
+  if (libraryId === null) { // Superadmin "All Libraries" view
+    const allLibsMeta = await getLibrariesMetadata();
+    if (allLibsMeta.length === 0) return [];
+    let combinedPayments: FeePayment[] = [];
+    for (const libMeta of allLibsMeta) {
+      const paymentsRef = ref(db, `libraries/${libMeta.id}/payments`);
+      const snapshot = await get(paymentsRef);
+      if (snapshot.exists()) {
+         snapshot.forEach(childSnapshot => {
+          // Enrich with libraryName if needed, though studentName should already have context
+          combinedPayments.push({ id: childSnapshot.key, ...childSnapshot.val() } as FeePayment);
+        });
+      }
+    }
+    return combinedPayments;
+  } else {
+    const paymentsRef = ref(db, `libraries/${libraryId}/payments`);
+    const snapshot = await get(paymentsRef);
+    if (snapshot.exists()) {
+      return snapshotToAray<FeePayment>(snapshot);
+    }
+    return [];
   }
-  return [];
 }
 
 export const addPayment = async (libraryId: string, paymentData: Omit<FeePayment, 'id' | 'studentName'>): Promise<FeePayment> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId);
   const studentRef = ref(db, `libraries/${currentLibraryId}/students/${paymentData.studentId}`);
   const studentSnapshot = await get(studentRef);
   if (!studentSnapshot.exists()) throw new Error("Student not found");
@@ -505,7 +579,7 @@ export const addPayment = async (libraryId: string, paymentData: Omit<FeePayment
 }
 
 export const markFeesAsPaid = async (libraryId: string, studentId: string): Promise<boolean> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId);
   const studentRef = ref(db, `libraries/${currentLibraryId}/students/${studentId}`);
   const studentSnapshot = await get(studentRef);
   if (!studentSnapshot.exists()) return false;
@@ -523,29 +597,64 @@ export const markFeesAsPaid = async (libraryId: string, studentId: string): Prom
 }
 
 // Dashboard Summary
-export const getDashboardSummary = async (libraryId: string): Promise<DashboardSummary> => {
-  const currentLibraryId = ensureLibraryId(libraryId);
-  const students = await getStudents(currentLibraryId);
-  const seats = await getSeats(currentLibraryId);
-  const payments = await getPayments(currentLibraryId);
-  const libraryInfo = await getLibraryById(currentLibraryId);
+export const getDashboardSummary = async (libraryId: string | null): Promise<DashboardSummary> => {
+  if (libraryId === null) { // Superadmin "All Libraries" view
+    const allLibsMeta = await getLibrariesMetadata();
+    if (allLibsMeta.length === 0) {
+        return { totalStudents: 0, totalSeats: 0, availableSeats: 0, monthlyIncome: 0, studentsWithDues: 0, libraryName: "All Libraries (None Found)" };
+    }
+    let totalStudents = 0;
+    let totalSeats = 0;
+    let availableSeats = 0;
+    let monthlyIncome = 0;
+    let studentsWithDues = 0;
 
-  const activeStudents = students.filter(s => s.status !== 'inactive');
-  const totalIncomeThisMonth = payments.reduce((sum, p) => {
-      const paymentDate = new Date(p.paymentDate);
-      const currentDate = new Date();
-      if (paymentDate.getFullYear() === currentDate.getFullYear() && paymentDate.getMonth() === currentDate.getMonth()) {
-        return sum + p.amount;
-      }
-      return sum;
-    }, 0);
+    for (const libMeta of allLibsMeta) {
+      const libStudents = await getStudents(libMeta.id);
+      const libSeats = await getSeats(libMeta.id);
+      const libPayments = await getPayments(libMeta.id);
+      
+      const activeLibStudents = libStudents.filter(s => s.status !== 'inactive');
+      totalStudents += activeLibStudents.length;
+      totalSeats += libSeats.length;
+      availableSeats += libSeats.filter(s => !s.isOccupied).length;
+      studentsWithDues += activeLibStudents.filter(s => s.feesDue > 0).length;
 
-  return {
-    totalStudents: activeStudents.length,
-    totalSeats: seats.length,
-    availableSeats: seats.filter(s => !s.isOccupied).length,
-    monthlyIncome: totalIncomeThisMonth,
-    studentsWithDues: activeStudents.filter(s => s.feesDue > 0).length,
-    libraryName: libraryInfo?.name || 'Current Library',
-  };
+      monthlyIncome += libPayments.reduce((sum, p) => {
+          const paymentDate = new Date(p.paymentDate);
+          const currentDate = new Date();
+          if (paymentDate.getFullYear() === currentDate.getFullYear() && paymentDate.getMonth() === currentDate.getMonth()) {
+            return sum + p.amount;
+          }
+          return sum;
+        }, 0);
+    }
+    return { totalStudents, totalSeats, availableSeats, monthlyIncome, studentsWithDues, libraryName: "All Libraries Overview" };
+
+  } else { // Single library view
+    const students = await getStudents(libraryId);
+    const seats = await getSeats(libraryId);
+    const payments = await getPayments(libraryId);
+    const libraryInfo = await getLibraryById(libraryId);
+
+    const activeStudents = students.filter(s => s.status !== 'inactive');
+    const totalIncomeThisMonth = payments.reduce((sum, p) => {
+        const paymentDate = new Date(p.paymentDate);
+        const currentDate = new Date();
+        if (paymentDate.getFullYear() === currentDate.getFullYear() && paymentDate.getMonth() === currentDate.getMonth()) {
+          return sum + p.amount;
+        }
+        return sum;
+      }, 0);
+
+    return {
+      totalStudents: activeStudents.length,
+      totalSeats: seats.length,
+      availableSeats: seats.filter(s => !s.isOccupied).length,
+      monthlyIncome: totalIncomeThisMonth,
+      studentsWithDues: activeStudents.filter(s => s.feesDue > 0).length,
+      libraryName: libraryInfo?.name || 'Current Library',
+    };
+  }
 };
+

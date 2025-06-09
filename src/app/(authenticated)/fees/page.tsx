@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from '@/hooks/use-toast';
-import { DollarSign, PlusCircle, CheckCircle, Loader2, History, Search, MoreHorizontal, AlertTriangle, FileText } from 'lucide-react';
+import { DollarSign, PlusCircle, CheckCircle, Loader2, History, Search, MoreHorizontal, AlertTriangle, FileText, Library } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,7 +47,7 @@ interface PaymentFormData {
 }
 
 export default function FeeCollectionPage() {
-  const { currentLibraryId, loading: authLoading } = useAuth();
+  const { currentLibraryId, currentLibraryName, isSuperAdmin, loading: authLoading } = useAuth();
   const router = useRouter();
   const [students, setStudents] = useState<Student[]>([]);
   const [payments, setPayments] = useState<FeePayment[]>([]);
@@ -73,34 +73,36 @@ export default function FeeCollectionPage() {
       setLoadingData(true);
       return;
     }
-    if(!currentLibraryId) {
-      setLoadingData(false);
-      setStudents([]);
-      setPayments([]);
-      setPaymentTypes([]);
-      return;
-    }
-    setLoadingData(true);
-    try {
-      const studentData = await getStudents(currentLibraryId);
-      const paymentData = await getPayments(currentLibraryId);
-      const paymentTypeData = await getPaymentTypes(currentLibraryId);
-      setStudents(studentData);
-      setPayments(paymentData);
-      setPaymentTypes(paymentTypeData);
-    } catch (error) {
-      toast({ title: "Error", description: "Failed to fetch fee data.", variant: "destructive" });
-      setStudents([]);
-      setPayments([]);
-      setPaymentTypes([]);
-    } finally {
-      setLoadingData(false);
+    // Superadmin in "All Libraries" view (currentLibraryId is null) OR a manager with a specific libraryId
+    if(isSuperAdmin || currentLibraryId) {
+      setLoadingData(true);
+      try {
+        // Pass currentLibraryId (can be null for superadmin to fetch all)
+        const studentData = await getStudents(currentLibraryId);
+        const paymentData = await getPayments(currentLibraryId);
+        const paymentTypeData = await getPaymentTypes(currentLibraryId);
+        setStudents(studentData);
+        setPayments(paymentData);
+        setPaymentTypes(paymentTypeData);
+      } catch (error) {
+        toast({ title: "Error", description: `Failed to fetch fee data for ${currentLibraryName || 'libraries'}.`, variant: "destructive" });
+        setStudents([]);
+        setPayments([]);
+        setPaymentTypes([]);
+      } finally {
+        setLoadingData(false);
+      }
+    } else { // Manager without libraryId
+        setLoadingData(false);
+        setStudents([]);
+        setPayments([]);
+        setPaymentTypes([]);
     }
   };
 
   useEffect(() => {
     fetchData();
-  }, [currentLibraryId, authLoading]);
+  }, [currentLibraryId, authLoading, isSuperAdmin, currentLibraryName]);
 
   const filteredStudents = useMemo(() => {
     return students.filter(student => {
@@ -116,8 +118,12 @@ export default function FeeCollectionPage() {
 
 
   const openPaymentDialog = (student: Student) => {
+    if (!currentLibraryId && isSuperAdmin) {
+      toast({ title: "Action Disabled", description: "Please select a specific library context (View As Manager) to add payments.", variant: "destructive" });
+      return;
+    }
     setCurrentStudent(student);
-    const studentPaymentType = paymentTypes.find(fp => fp.id === student.paymentTypeId);
+    const studentPaymentType = paymentTypes.find(fp => fp.id === student.paymentTypeId && (!isSuperAdmin || fp.libraryName === student.libraryName) ); // Match library if SA All view
     setPaymentFormData({
       studentId: student.id,
       amount: student.feesDue > 0 ? student.feesDue : (studentPaymentType?.amount || 0),
@@ -134,7 +140,10 @@ export default function FeeCollectionPage() {
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentStudent || !currentLibraryId) return;
+    if (!currentStudent || !currentLibraryId) { // Action requires specific library
+        toast({ title: "Error", description: "A specific library context is required to add a payment.", variant: "destructive" });
+        return;
+    }
     setIsSubmitting(true);
     try {
       await addPayment(currentLibraryId, {
@@ -154,7 +163,10 @@ export default function FeeCollectionPage() {
   };
 
   const markAsPaid = async (studentId: string) => {
-    if (!currentLibraryId) return;
+    if (!currentLibraryId) { // Action requires specific library
+       toast({ title: "Error", description: "A specific library context is required to clear dues.", variant: "destructive" });
+       return;
+    }
     setIsSubmitting(true);
     try {
       await markFeesAsPaidAction(currentLibraryId, studentId);
@@ -169,11 +181,13 @@ export default function FeeCollectionPage() {
 
   const getStudentPayments = () => {
     if (!currentStudent) return [];
+    // For SA all-libraries view, filter payments for that student, potentially across all their records if IDs are same (unlikely)
+    // For now, assuming student ID is globally unique or filtered by currentStudent.libraryName if available
     return payments.filter(p => p.studentId === currentStudent.id).sort((a,b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime());
   };
   
   const getStudentPaymentTypeName = (student: Student) => {
-    const plan = paymentTypes.find(fp => fp.id === student.paymentTypeId);
+    const plan = paymentTypes.find(fp => fp.id === student.paymentTypeId && (!isSuperAdmin || fp.libraryName === student.libraryName));
     return plan ? `${plan.name} (INR${plan.amount})` : 'No Plan';
   };
   
@@ -185,21 +199,28 @@ export default function FeeCollectionPage() {
     );
   }
 
-  if (!currentLibraryId) {
+  if (!isSuperAdmin && !currentLibraryId) {
     return (
       <div className="flex flex-col justify-center items-center h-full text-center p-4">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
         <p className="text-xl font-semibold">No Library Selected / User Misconfiguration</p>
-        <p className="text-muted-foreground">Please ensure your user account is correctly set up with a library or select a library if you are a superadmin.</p>
+        <p className="text-muted-foreground">Please ensure your user account is correctly set up with a library.</p>
         <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
       </div>
     );
   }
 
+  const pageTitle = isSuperAdmin && !currentLibraryId ? "All Fee Collections (All Libraries)" : `Fee Collection (${currentLibraryName || 'Selected Library'})`;
+  const canManageFees = !!currentLibraryId; // Actions require a specific library context
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <h1 className="text-3xl font-headline font-bold text-primary">Fee Collection</h1>
+        <div>
+            <h1 className="text-3xl font-headline font-bold text-primary">{pageTitle}</h1>
+            {currentLibraryName && <p className="text-md text-muted-foreground flex items-center"><Library className="h-4 w-4 mr-2 text-accent" />Managing for: <span className="font-semibold ml-1">{currentLibraryName}</span></p>}
+            {isSuperAdmin && !currentLibraryId && <p className="text-md text-muted-foreground">Displaying fee status from all libraries. Select a library via "View As Manager" to manage specific fees.</p>}
+        </div>
         <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
           <div className="relative w-full sm:w-auto">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -228,7 +249,7 @@ export default function FeeCollectionPage() {
       <Card className="shadow-xl">
         <CardHeader>
           <CardTitle>Student Fee Status</CardTitle>
-          <CardDescription>See student payments and amounts to pay for the current library.</CardDescription>
+          <CardDescription>See student payments and amounts to pay {currentLibraryName ? `for ${currentLibraryName}` : (isSuperAdmin ? "across all libraries" : "")}.</CardDescription>
         </CardHeader>
         <CardContent>
         {filteredStudents.length > 0 ? (
@@ -237,6 +258,7 @@ export default function FeeCollectionPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Student Name</TableHead>
+                  {isSuperAdmin && !currentLibraryId && <TableHead>Library</TableHead>}
                   <TableHead>Payment Type</TableHead>
                   <TableHead>Amount to Pay</TableHead>
                   <TableHead>Last Payment</TableHead>
@@ -248,6 +270,7 @@ export default function FeeCollectionPage() {
                 {filteredStudents.map((student) => (
                   <TableRow key={student.id}>
                     <TableCell className="font-medium">{student.fullName}</TableCell>
+                    {isSuperAdmin && !currentLibraryId && <TableCell>{student.libraryName || 'N/A'}</TableCell>}
                     <TableCell>{getStudentPaymentTypeName(student)}</TableCell>
                     <TableCell className={student.feesDue > 0 ? 'text-destructive font-semibold' : 'text-green-600'}>
                       INR{student.feesDue.toFixed(2)}
@@ -261,8 +284,8 @@ export default function FeeCollectionPage() {
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0" disabled={isSubmitting && currentStudent?.id === student.id}>
-                            {isSubmitting && currentStudent?.id === student.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
+                          <Button variant="ghost" className="h-8 w-8 p-0" disabled={(isSubmitting && currentStudent?.id === student.id) || !canManageFees} title={!canManageFees ? "Select library to manage fees" : "Actions"}>
+                            {(isSubmitting && currentStudent?.id === student.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -301,7 +324,7 @@ export default function FeeCollectionPage() {
                 <p className="mt-1 text-sm text-muted-foreground">
                     {searchTerm || statusFilter !== 'all' ? 
                         "Try adjusting your search or filter criteria." :
-                        "No student fee information to display for this library."
+                        `No student fee information to display ${currentLibraryName ? `for ${currentLibraryName}` : (isSuperAdmin ? "across all libraries" : "")}.`
                     }
                 </p>
             </div>
@@ -314,7 +337,7 @@ export default function FeeCollectionPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Payment for {currentStudent?.fullName}</DialogTitle>
-            <DialogDescription>Record a new payment for this student.</DialogDescription>
+            <DialogDescription>Record a new payment for this student. This will apply to {currentLibraryName || "the selected library context"}.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handlePaymentSubmit}>
             <div className="space-y-4 py-4">
@@ -365,6 +388,7 @@ export default function FeeCollectionPage() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Payment History for {currentStudent?.fullName}</DialogTitle>
+            <DialogDescription>Displaying payments for this student {currentLibraryName ? `within ${currentLibraryName}` : (isSuperAdmin && !currentStudent?.libraryName ? "(across all libraries if applicable)" : `within library ${currentStudent?.libraryName}`)}.</DialogDescription>
           </DialogHeader>
           <div className="py-4 max-h-[60vh] overflow-y-auto">
             {getStudentPayments().length > 0 ? (
@@ -400,3 +424,4 @@ export default function FeeCollectionPage() {
     </div>
   );
 }
+

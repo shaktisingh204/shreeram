@@ -69,43 +69,62 @@ export default function SeatsPage() {
       setLoadingData(true);
       return;
     }
-    if (!currentLibraryId) {
-      setLoadingData(false);
-      setAllSeats([]);
-      setStudents([]);
-      return;
-    }
-    setLoadingData(true);
-    try {
-      const seatData = await getSeats(currentLibraryId);
-      const studentData = await getStudents(currentLibraryId);
-      setAllSeats(seatData);
-      setStudents(studentData.filter(s => s.status !== 'inactive'));
-    } catch (error) {
-        toast({ title: "Error", description: `Failed to fetch seat or student data for ${currentLibraryName || 'the current library'}. ${(error as Error).message}`, variant: "destructive" });
+    // Superadmin in "All Libraries" view (currentLibraryId is null) OR a specific library context is set
+    if (isSuperAdmin || currentLibraryId) {
+      setLoadingData(true);
+      try {
+        const seatData = await getSeats(currentLibraryId); // Pass null for SA all-libs view
+        setAllSeats(seatData);
+        // Students are needed only for assignment, fetch for current context if specific, or all if SA all-libs
+        // For simplicity, fetch students for currentLibraryId (which would be the specific one if assigning)
+        // Or perhaps fetch all students if SA is in all-libs view for dropdown.
+        // For now, keep student fetching tied to a specific library context for assignment.
+        if (currentLibraryId) {
+            const studentData = await getStudents(currentLibraryId);
+            setStudents(studentData.filter(s => s.status !== 'inactive'));
+        } else {
+            // If SA is in all-libs view, and they try to assign, they'll need to pick a student from that seat's library.
+            // This might need a more complex student selector in the assign dialog for SA all-libs view.
+            // For now, student list for assignment will be empty if SA is in all-libs view, disabling assignment.
+            setStudents([]);
+        }
+      } catch (error) {
+          toast({ title: "Error", description: `Failed to fetch seat or student data for ${currentLibraryName || 'libraries'}. ${(error as Error).message}`, variant: "destructive" });
+          setAllSeats([]);
+          setStudents([]);
+      } finally {
+          setLoadingData(false);
+      }
+    } else { // Manager without libraryId
+        setLoadingData(false);
         setAllSeats([]);
         setStudents([]);
-    } finally {
-        setLoadingData(false);
     }
   };
 
   useEffect(() => {
     fetchAllData();
-  }, [currentLibraryId, authLoading]); 
+  }, [currentLibraryId, authLoading, isSuperAdmin, currentLibraryName]); 
 
-  const seatsByFloor = useMemo(() => {
+  const seatsByFloorAndLibrary = useMemo(() => {
     return allSeats.reduce((acc, seat) => {
+      const libName = seat.libraryName || currentLibraryName || 'Unknown Library';
       const floor = seat.floor || 'Uncategorized';
-      if (!acc[floor]) {
-        acc[floor] = [];
+      const key = isSuperAdmin && !currentLibraryId ? `${libName} - ${floor}` : floor; // Group by lib+floor for SA All view
+
+      if (!acc[key]) {
+        acc[key] = [];
       }
-      acc[floor].push(seat);
+      acc[key].push(seat);
       return acc;
     }, {} as Record<string, Seat[]>);
-  }, [allSeats]);
+  }, [allSeats, isSuperAdmin, currentLibraryId, currentLibraryName]);
 
   const openAssignDialog = (seat: Seat) => {
+    if (!currentLibraryId && isSuperAdmin) {
+        toast({ title: "Action Disabled", description: "Please select a specific library context (View As Manager) to assign seats.", variant: "destructive" });
+        return;
+    }
     setSelectedSeatForAssignment(seat);
     setSelectedStudentIdForAssignment(seat.studentId || undefined);
     setIsAssignDialogOpen(true);
@@ -113,11 +132,12 @@ export default function SeatsPage() {
   
   const handleAssignSeat = async () => {
     if (!currentLibraryId || !selectedSeatForAssignment || !selectedStudentIdForAssignment) {
-      toast({ title: "Error", description: "Please select a seat and a student.", variant: "destructive" });
+      toast({ title: "Error", description: "Please select a seat and a student from a specific library context.", variant: "destructive" });
       return;
     }
     setIsSubmitting(true);
     try {
+      // Assign seat actions always require a specific library context
       await assignSeatAction(currentLibraryId, selectedStudentIdForAssignment, selectedSeatForAssignment.id);
       toast({ title: "Success", description: `Seat ${selectedSeatForAssignment.seatNumber} (${selectedSeatForAssignment.floor}) assigned in ${currentLibraryName}.` });
       await fetchAllData();
@@ -131,7 +151,7 @@ export default function SeatsPage() {
   
   const handleUnassignSeat = async () => {
     if (!currentLibraryId || !selectedSeatForAssignment || !selectedSeatForAssignment.studentId) {
-      toast({ title: "Error", description: "This seat is already vacant.", variant: "destructive" });
+      toast({ title: "Error", description: "This seat is already vacant or no library selected.", variant: "destructive" });
       return;
     }
     setIsSubmitting(true);
@@ -148,12 +168,13 @@ export default function SeatsPage() {
   };
 
   const openAddSeatDialog = () => {
-    if (isSuperAdmin && (!allLibraries || allLibraries.length === 0)) {
-      toast({ title: "Cannot Add Seat", description: "Superadmin must create a library before adding seats.", variant: "destructive" });
+    if (!currentLibraryId) { // True for SA in All Libs view, or unassigned manager
+      toast({ title: "Action Disabled", description: "Please select a specific library context (View As Manager or select from header) to add seats.", variant: "destructive" });
       return;
     }
-    if (!currentLibraryId) {
-       toast({ title: "Cannot Add Seat", description: "Please select a library from the header dropdown first.", variant: "destructive" });
+    if (isSuperAdmin && allLibraries.length === 0) { // SA, no libs created yet
+      toast({ title: "Cannot Add Seat", description: "Superadmin must create a library before adding seats.", variant: "destructive" });
+      router.push('/manage-libraries');
       return;
     }
     setEditingSeat(null);
@@ -162,25 +183,28 @@ export default function SeatsPage() {
   };
 
   const openEditSeatDialog = (seat: Seat) => {
+     if (!currentLibraryId && isSuperAdmin) { // SA in All Libs view
+        toast({ title: "Action Disabled", description: "Please select a specific library context (View As Manager) to edit seats.", variant: "destructive" });
+        return;
+    }
     setEditingSeat(seat);
     setSeatFormDialogMode('edit');
     setIsSeatFormOpen(true);
   };
 
   const handleSeatFormSubmit = async (values: SeatFormValues) => {
-    // For adding a seat, currentLibraryId (from global context) is used as the target.
     const targetLibId = currentLibraryId; 
     if (!targetLibId) {
-        toast({ title: "Error", description: "No library selected to save the seat. Please select a library from the header.", variant: "destructive" });
+        toast({ title: "Error", description: "No specific library selected to save the seat. Please select a library context.", variant: "destructive" });
         return;
     }
     setIsSubmitting(true);
     try {
       if (seatFormDialogMode === 'edit' && editingSeat) {
-        await updateSeatDetails(targetLibId, editingSeat.id, values); // Edit happens in current context
+        await updateSeatDetails(targetLibId, editingSeat.id, values);
         toast({ title: "Success", description: `Seat updated successfully in ${currentLibraryName}.` });
       } else {
-        await addSeat(targetLibId, values); // Add happens to current context
+        await addSeat(targetLibId, values); 
         toast({ title: "Success", description: `Seat added successfully to ${currentLibraryName}.` });
       }
       await fetchAllData();
@@ -193,6 +217,10 @@ export default function SeatsPage() {
   };
   
   const confirmDeleteSeat = (seat: Seat) => {
+    if (!currentLibraryId && isSuperAdmin) {
+        toast({ title: "Action Disabled", description: "Please select a specific library context (View As Manager) to delete seats.", variant: "destructive" });
+        return;
+    }
     setSeatToDelete(seat);
     setIsDeleteConfirmOpen(true);
   };
@@ -221,27 +249,15 @@ export default function SeatsPage() {
     );
   }
 
-  if (!currentLibraryId && !authLoading) { // Covers managers without context and superadmins who haven't selected one AND have no libraries
-     let message = "Please ensure your user account is correctly set up with a library or select a library if you are a superadmin.";
-     let buttonText = "Go to Dashboard";
-     let buttonAction = () => router.push('/dashboard');
-
-     if (isSuperAdmin && (!allLibraries || allLibraries.length === 0)) {
-        message = "Superadmin must create a library first.";
-        buttonAction = () => router.push('/manage-libraries');
-        buttonText = "Manage Libraries";
-     } else if (isSuperAdmin && allLibraries && allLibraries.length > 0) {
-        message = "Superadmin, please select a library from the header dropdown to manage seats.";
-     }
-
+  if (!isSuperAdmin && !currentLibraryId && !authLoading) {
     return (
       <div className="flex flex-col justify-center items-center h-full text-center p-4">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
          <Card className="w-full max-w-md mt-4 shadow-lg">
           <CardHeader><CardTitle className="text-primary">No Library Selected</CardTitle></CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">{message}</p>
-            <Button onClick={buttonAction} className="mt-4">{buttonText}</Button>
+            <p className="text-muted-foreground">Please ensure your manager account is correctly set up with a library.</p>
+            <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
           </CardContent>
         </Card>
       </div>
@@ -250,18 +266,20 @@ export default function SeatsPage() {
 
 
   const studentsForAssignmentDropdown = students.filter(s => !s.seatId || s.id === selectedSeatForAssignment?.studentId);
-  const defaultAccordionOpen = Object.keys(seatsByFloor).length > 0 ? [Object.keys(seatsByFloor)[0]] : [];
-
+  const defaultAccordionOpenKeys = Object.keys(seatsByFloorAndLibrary).length > 0 ? [Object.keys(seatsByFloorAndLibrary)[0]] : [];
+  const pageTitle = isSuperAdmin && !currentLibraryId ? "All Seats (All Libraries)" : `Seat Setup (${currentLibraryName || 'Selected Library'})`;
+  const canAddSeat = !!currentLibraryId; // Can only add if a specific library is selected
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-            <h1 className="text-3xl font-headline font-bold text-primary">Seat Setup</h1>
+            <h1 className="text-3xl font-headline font-bold text-primary">{pageTitle}</h1>
             {currentLibraryName && <p className="text-md text-muted-foreground flex items-center"><Library className="h-4 w-4 mr-2 text-accent" />Managing seats for: <span className="font-semibold ml-1">{currentLibraryName}</span></p>}
+            {isSuperAdmin && !currentLibraryId && <p className="text-md text-muted-foreground">Displaying seats from all libraries. Select a library via "View As Manager" to manage specific seats.</p>}
         </div>
         <div className="flex items-center gap-4">
-           <Button onClick={openAddSeatDialog} disabled={!currentLibraryId || (isSuperAdmin && (!allLibraries || allLibraries.length === 0))}>
+           <Button onClick={openAddSeatDialog} disabled={!canAddSeat} title={!canAddSeat ? "Select a specific library to add seats" : "Add new seat"}>
             <PlusCircle className="mr-2 h-4 w-4" /> Add New Seat
           </Button>
           <div className="flex items-center gap-2">
@@ -275,11 +293,11 @@ export default function SeatsPage() {
         </div>
       </div>
 
-      { (isSuperAdmin && (!allLibraries || allLibraries.length === 0)) ? (
+      { (isSuperAdmin && allLibraries.length === 0 && !currentLibraryId) ? (
          <Card className="shadow-xl">
             <CardHeader>
                 <CardTitle>No Libraries Exist</CardTitle>
-                <CardDescription>Superadmin must create a library before adding seats.</CardDescription>
+                <CardDescription>Superadmin must create a library before managing seats.</CardDescription>
             </CardHeader>
             <CardContent className="text-center py-8">
                  <Library className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
@@ -289,12 +307,12 @@ export default function SeatsPage() {
                 </Button>
             </CardContent>
         </Card>
-      ) : Object.keys(seatsByFloor).length > 0 ? (
-        <Accordion type="multiple" defaultValue={defaultAccordionOpen} className="w-full">
-          {Object.entries(seatsByFloor).map(([floor, floorSeats]) => (
-            <AccordionItem value={floor} key={floor}>
+      ) : Object.keys(seatsByFloorAndLibrary).length > 0 ? (
+        <Accordion type="multiple" defaultValue={defaultAccordionOpenKeys} className="w-full">
+          {Object.entries(seatsByFloorAndLibrary).map(([floorOrLibFloor, floorSeats]) => (
+            <AccordionItem value={floorOrLibFloor} key={floorOrLibFloor}>
               <AccordionTrigger className="text-xl font-semibold hover:no-underline">
-                {floor} <span className="text-sm font-normal text-muted-foreground ml-2">({floorSeats.length} seats)</span>
+                {floorOrLibFloor} <span className="text-sm font-normal text-muted-foreground ml-2">({floorSeats.length} seats)</span>
               </AccordionTrigger>
               <AccordionContent>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 p-1">
@@ -311,7 +329,7 @@ export default function SeatsPage() {
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={isSuperAdmin && !currentLibraryId} title={isSuperAdmin && !currentLibraryId ? "Select library to manage" : "Actions"}>
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -341,6 +359,9 @@ export default function SeatsPage() {
                             <p className="text-xs text-muted-foreground">Available</p>
                         </div>
                       )}
+                       {isSuperAdmin && !currentLibraryId && seat.libraryName && (
+                        <p className="text-xs text-muted-foreground mt-1 self-start pl-1">Lib: {seat.libraryName}</p>
+                      )}
                     </Card>
                   ))}
                 </div>
@@ -351,15 +372,20 @@ export default function SeatsPage() {
       ) : (
         <Card className="shadow-xl">
             <CardHeader>
-                <CardTitle>No Seats Found for {currentLibraryName || "Current Library"}</CardTitle>
-                <CardDescription>Start by adding floors and seats for this library.</CardDescription>
+                <CardTitle>No Seats Found {currentLibraryName ? `for ${currentLibraryName}` : (isSuperAdmin ? "across all libraries" : "")}</CardTitle>
+                <CardDescription>Start by adding floors and seats {currentLibraryName ? `for this library` : (isSuperAdmin && allLibraries.length > 0 ? "to a selected library" : "")}.</CardDescription>
             </CardHeader>
             <CardContent className="text-center py-8">
                  <Armchair className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">No seats have been configured yet for {currentLibraryName || "this library"}.</p>
-                <Button className="mt-4" onClick={openAddSeatDialog} disabled={!currentLibraryId}>
-                    <PlusCircle className="mr-2 h-4 w-4" /> Add First Seat to {currentLibraryName || "Library"}
-                </Button>
+                <p className="text-muted-foreground">No seats have been configured yet {currentLibraryName ? `for ${currentLibraryName}` : (isSuperAdmin ? "in any library" : "")}.</p>
+                {canAddSeat && (
+                  <Button className="mt-4" onClick={openAddSeatDialog}>
+                      <PlusCircle className="mr-2 h-4 w-4" /> Add First Seat to {currentLibraryName || "Library"}
+                  </Button>
+                )}
+                {isSuperAdmin && !canAddSeat && allLibraries.length > 0 && (
+                     <p className="mt-2 text-sm text-muted-foreground">Select a specific library context to add seats.</p>
+                )}
             </CardContent>
         </Card>
       )}
@@ -379,9 +405,9 @@ export default function SeatsPage() {
             <label htmlFor="student-select" className="block text-sm font-medium text-foreground">
               Select Student
             </label>
-            <Select value={selectedStudentIdForAssignment} onValueChange={setSelectedStudentIdForAssignment}>
+            <Select value={selectedStudentIdForAssignment} onValueChange={setSelectedStudentIdForAssignment} disabled={!currentLibraryId}>
               <SelectTrigger id="student-select">
-                <SelectValue placeholder="Select a student to assign" />
+                <SelectValue placeholder={currentLibraryId ? "Select a student to assign" : "Select library context first"} />
               </SelectTrigger>
               <SelectContent>
                 {studentsForAssignmentDropdown.map(student => (
@@ -391,11 +417,12 @@ export default function SeatsPage() {
                 ))}
               </SelectContent>
             </Select>
+             {!currentLibraryId && <p className="text-xs text-destructive">Student list unavailable. Select a specific library context.</p>}
           </div>
 
           <DialogFooter className="sm:justify-between items-center">
             {selectedSeatForAssignment?.isOccupied ? (
-              <Button variant="destructive" onClick={handleUnassignSeat} disabled={isSubmitting}>
+              <Button variant="destructive" onClick={handleUnassignSeat} disabled={isSubmitting || !currentLibraryId}>
                 {isSubmitting && selectedSeatForAssignment?.studentId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Make Seat Empty
               </Button>
             ) : <div/> }
@@ -406,7 +433,7 @@ export default function SeatsPage() {
               <Button 
                 type="button" 
                 onClick={handleAssignSeat} 
-                disabled={isSubmitting || !selectedStudentIdForAssignment || selectedStudentIdForAssignment === selectedSeatForAssignment?.studentId}
+                disabled={isSubmitting || !selectedStudentIdForAssignment || selectedStudentIdForAssignment === selectedSeatForAssignment?.studentId || !currentLibraryId}
               >
                 {isSubmitting && selectedStudentIdForAssignment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} 
                 {selectedSeatForAssignment?.isOccupied && selectedSeatForAssignment?.studentId !== selectedStudentIdForAssignment ? 'Change Student' : 'Confirm Assignment'}
@@ -455,7 +482,7 @@ export default function SeatsPage() {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                 <AlertDialogCancel onClick={() => setSeatToDelete(null)}>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDeleteSeat} disabled={isSubmitting} className="bg-destructive hover:bg-destructive/90">
+                <AlertDialogAction onClick={handleDeleteSeat} disabled={isSubmitting || !currentLibraryId} className="bg-destructive hover:bg-destructive/90">
                     {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     Delete
                 </AlertDialogAction>
@@ -465,3 +492,4 @@ export default function SeatsPage() {
     </div>
   );
 }
+

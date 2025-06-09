@@ -15,6 +15,7 @@ export interface Student {
   lastPaymentDate?: string;
   enrollmentDate: string; // Joined On
   paymentTypeId?: string;
+  libraryName?: string; // Optional: for superadmin all-libraries view context
 }
 
 export interface Seat {
@@ -24,15 +25,17 @@ export interface Seat {
   isOccupied: boolean;
   studentId?: string;
   studentName?: string;
+  libraryName?: string; // Optional: for superadmin all-libraries view context
 }
 
 export interface FeePayment {
   id: string;
   studentId: string;
-  studentName?: string;
+  studentName?: string; // This should ideally reflect student.fullName which might have library context
   amount: number;
   paymentDate: string;
   notes?: string;
+  libraryName?: string; // Optional: for superadmin all-libraries view context
 }
 
 export interface PaymentType { // Renamed from FeePlan
@@ -40,6 +43,7 @@ export interface PaymentType { // Renamed from FeePlan
   name: string;
   amount: number;
   frequency: 'monthly' | 'quarterly' | 'annually'; // Payment Cycle
+  libraryName?: string; // Optional: for superadmin all-libraries view context
 }
 
 export interface DashboardSummary {

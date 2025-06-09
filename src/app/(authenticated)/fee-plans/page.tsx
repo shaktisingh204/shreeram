@@ -36,34 +36,37 @@ export default function PaymentTypesPage() {
       setLoadingData(true);
       return;
     }
-    if (!currentLibraryId) {
-      setLoadingData(false);
-      setPaymentTypes([]);
-      return;
-    }
-    setLoadingData(true);
-    try {
-        const data = await getPaymentTypes(currentLibraryId);
-        setPaymentTypes(data);
-    } catch (error) {
-        toast({ title: "Error", description: `Failed to fetch payment types for ${currentLibraryName || 'the library'}.`, variant: "destructive" });
-        setPaymentTypes([]);
-    } finally {
+    // Superadmin in "All Libraries" view (currentLibraryId is null) OR a manager with a specific libraryId
+    if (isSuperAdmin || currentLibraryId) {
+      setLoadingData(true);
+      try {
+          // Pass currentLibraryId (can be null for superadmin to fetch all)
+          const data = await getPaymentTypes(currentLibraryId);
+          setPaymentTypes(data);
+      } catch (error) {
+          toast({ title: "Error", description: `Failed to fetch payment types for ${currentLibraryName || 'libraries'}.`, variant: "destructive" });
+          setPaymentTypes([]);
+      } finally {
+          setLoadingData(false);
+      }
+    } else { // Manager without libraryId
         setLoadingData(false);
+        setPaymentTypes([]);
     }
   };
 
   useEffect(() => {
     fetchData();
-  }, [currentLibraryId, authLoading]);
+  }, [currentLibraryId, authLoading, isSuperAdmin, currentLibraryName]);
 
   const handleAddClick = () => {
-    if (isSuperAdmin && (!allLibraries || allLibraries.length === 0)) {
-      toast({ title: "Cannot Add Plan", description: "Superadmin must create a library before adding payment types.", variant: "destructive" });
+     if (!currentLibraryId) { // True for SA in All Libs view, or unassigned manager
+       toast({ title: "Action Disabled", description: "Please select a specific library context (View As Manager or select from header) to add payment types.", variant: "destructive" });
       return;
     }
-     if (!currentLibraryId) {
-       toast({ title: "Cannot Add Plan", description: "Please select a library from the header dropdown first.", variant: "destructive" });
+     if (isSuperAdmin && allLibraries.length === 0) { // SA, no libs created yet
+      toast({ title: "Cannot Add Plan", description: "Superadmin must create a library before adding payment types.", variant: "destructive" });
+      router.push('/manage-libraries');
       return;
     }
     setEditingPaymentType(undefined);
@@ -71,12 +74,21 @@ export default function PaymentTypesPage() {
   };
 
   const handleEditClick = (plan: PaymentType) => {
+    if (!currentLibraryId && isSuperAdmin) {
+        toast({ title: "Action Disabled", description: "Please select a specific library context (View As Manager) to edit payment types.", variant: "destructive" });
+        return;
+    }
     setEditingPaymentType(plan);
     setIsFormOpen(true);
   };
 
   const handleDeleteClick = async (planId: string) => {
-    if (!currentLibraryId) return;
+    if (!currentLibraryId && isSuperAdmin) { // Check if SA is in "All Libraries" view
+        toast({ title: "Action Disabled", description: "Please select a specific library context (View As Manager) to delete payment types.", variant: "destructive" });
+        return;
+    }
+    if (!currentLibraryId) return; // General check if no lib context
+
     if (confirm("Are you sure you want to delete this payment type? This action cannot be undone.")) {
         // In a real app, call deletePaymentType(currentLibraryId, planId)
         // For now, this is a mock delete.
@@ -88,9 +100,9 @@ export default function PaymentTypesPage() {
   };
 
   const handleFormSubmit = async (values: PaymentTypeFormValues) => {
-    const targetLibId = currentLibraryId; // Add/edit happens in the current global context
+    const targetLibId = currentLibraryId; 
     if (!targetLibId) {
-        toast({ title: "Error", description: "No library selected. Please select a library from the header.", variant: "destructive" });
+        toast({ title: "Error", description: "No specific library selected to save the payment type. Please select a library context.", variant: "destructive" });
         return;
     }
     setIsSubmitting(true);
@@ -120,31 +132,23 @@ export default function PaymentTypesPage() {
     );
   }
 
-  if (!currentLibraryId && !authLoading) {
-     let message = "Please ensure your user account is correctly set up with a library or select a library if you are a superadmin.";
-     let buttonText = "Go to Dashboard";
-     let buttonAction = () => router.push('/dashboard');
-
-     if (isSuperAdmin && (!allLibraries || allLibraries.length === 0)) {
-        message = "Superadmin must create a library first.";
-        buttonAction = () => router.push('/manage-libraries');
-        buttonText = "Manage Libraries";
-     } else if (isSuperAdmin && allLibraries && allLibraries.length > 0) {
-        message = "Superadmin, please select a library from the header dropdown to manage payment types.";
-     }
+  if (!isSuperAdmin && !currentLibraryId && !authLoading) {
     return (
       <div className="flex flex-col justify-center items-center h-full text-center p-4">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
          <Card className="w-full max-w-md mt-4 shadow-lg">
           <CardHeader><CardTitle className="text-primary">No Library Selected</CardTitle></CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">{message}</p>
-            <Button onClick={buttonAction} className="mt-4">{buttonText}</Button>
+            <p className="text-muted-foreground">Please ensure your manager account is correctly set up with a library.</p>
+            <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
           </CardContent>
         </Card>
       </div>
     );
   }
+  
+  const pageTitle = isSuperAdmin && !currentLibraryId ? "All Payment Types (All Libraries)" : `Payment Types (${currentLibraryName || 'Selected Library'})`;
+  const canManagePlans = !!currentLibraryId; // Can only add/edit/delete if a specific library is selected
 
   const getFrequencyDisplay = (frequency: PaymentType['frequency']) => {
     switch (frequency) {
@@ -159,10 +163,11 @@ export default function PaymentTypesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-            <h1 className="text-3xl font-headline font-bold text-primary">Payment Types</h1>
+            <h1 className="text-3xl font-headline font-bold text-primary">{pageTitle}</h1>
             {currentLibraryName && <p className="text-md text-muted-foreground flex items-center"><Library className="h-4 w-4 mr-2 text-accent" />Managing for: <span className="font-semibold ml-1">{currentLibraryName}</span></p>}
+            {isSuperAdmin && !currentLibraryId && <p className="text-md text-muted-foreground">Displaying payment types from all libraries. Select a library via "View As Manager" to manage specific types.</p>}
         </div>
-        <Button onClick={handleAddClick} disabled={!currentLibraryId || (isSuperAdmin && (!allLibraries || allLibraries.length === 0))}>
+        <Button onClick={handleAddClick} disabled={!canManagePlans || (isSuperAdmin && allLibraries.length === 0)} title={!canManagePlans ? "Select a specific library to add payment types" : "Add new payment type"}>
           <PlusCircle className="mr-2 h-4 w-4" /> Add Payment Type
         </Button>
       </div>
@@ -191,11 +196,11 @@ export default function PaymentTypesPage() {
 
       <Card className="shadow-xl">
         <CardHeader>
-            <CardTitle>Existing Payment Types for {currentLibraryName}</CardTitle>
-            <CardDescription>Manage different payment options for students in this library.</CardDescription>
+            <CardTitle>Existing Payment Types {currentLibraryName ? `for ${currentLibraryName}` : (isSuperAdmin ? " (All Libraries)" : "")}</CardTitle>
+            <CardDescription>Manage different payment options for students {currentLibraryName ? `in this library` : (isSuperAdmin ? "across all libraries" : "")}.</CardDescription>
         </CardHeader>
         <CardContent>
-            { (isSuperAdmin && (!allLibraries || allLibraries.length === 0)) ? (
+            { (isSuperAdmin && allLibraries.length === 0 && !currentLibraryId) ? (
                 <div className="text-center py-12">
                     <Library className="mx-auto h-12 w-12 text-muted-foreground" />
                     <h3 className="mt-2 text-xl font-semibold">No Libraries Exist</h3>
@@ -212,6 +217,7 @@ export default function PaymentTypesPage() {
                 <TableHeader>
                 <TableRow>
                     <TableHead>Type Name</TableHead>
+                    {isSuperAdmin && !currentLibraryId && <TableHead>Library</TableHead>}
                     <TableHead>Amount</TableHead>
                     <TableHead>Payment Cycle</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -221,13 +227,13 @@ export default function PaymentTypesPage() {
                 {paymentTypes.map((plan) => (
                     <TableRow key={plan.id}>
                     <TableCell className="font-medium">{plan.name}</TableCell>
+                    {isSuperAdmin && !currentLibraryId && <TableCell>{plan.libraryName || 'N/A'}</TableCell>}
                     <TableCell>INR{plan.amount.toFixed(2)}</TableCell>
                     <TableCell>{getFrequencyDisplay(plan.frequency)}</TableCell>
                     <TableCell className="text-right">
                         <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Open menu</span>
+                            <Button variant="ghost" className="h-8 w-8 p-0" disabled={!canManagePlans} title={!canManagePlans ? "Select library to manage" : "Actions"}>
                             <MoreHorizontal className="h-4 w-4" />
                             </Button>
                         </DropdownMenuTrigger>
@@ -251,11 +257,13 @@ export default function PaymentTypesPage() {
                 <ListChecks className="mx-auto h-12 w-12 text-muted-foreground" />
                 <h3 className="mt-2 text-xl font-semibold">No Payment Types Found</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                    Add a new payment type to start for {currentLibraryName || 'this library'}.
+                   {currentLibraryName ? `Add a new payment type to start for ${currentLibraryName}.` : (isSuperAdmin && allLibraries.length > 0 ? "No payment types found across all libraries, or select a specific library to add one." : "Add a new payment type.")}
                 </p>
-                 <Button className="mt-4" onClick={handleAddClick} disabled={!currentLibraryId}>
+                {canManagePlans && (
+                 <Button className="mt-4" onClick={handleAddClick}>
                     <PlusCircle className="mr-2 h-4 w-4" /> Add Payment Type
                 </Button>
+                )}
             </div>
             )}
         </CardContent>
@@ -264,3 +272,4 @@ export default function PaymentTypesPage() {
     </div>
   );
 }
+
