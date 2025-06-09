@@ -137,7 +137,7 @@ export default function PaymentTypesPage() { // Renamed component
                 {paymentTypes.map((plan) => (
                     <TableRow key={plan.id}>
                     <TableCell className="font-medium">{plan.name}</TableCell>
-                    <TableCell>₹{plan.amount.toFixed(2)}</TableCell>
+                    <TableCell>INR{plan.amount.toFixed(2)}</TableCell>
                     <TableCell>{getFrequencyDisplay(plan.frequency)}</TableCell>
                     <TableCell className="text-right">
                         <DropdownMenu>

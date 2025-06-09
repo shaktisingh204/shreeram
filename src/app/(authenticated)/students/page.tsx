@@ -158,7 +158,7 @@ export default function StudentsPage() {
                       {getStatusBadgeText(student.status)}
                     </Badge>
                   </TableCell>
-                  <TableCell>₹{student.feesDue.toFixed(2)}</TableCell>
+                  <TableCell>INR{student.feesDue.toFixed(2)}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

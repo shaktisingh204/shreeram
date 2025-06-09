@@ -321,7 +321,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                 name="feesDue"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Amount to Pay (₹)</FormLabel>
+                    <FormLabel>Amount to Pay (INR)</FormLabel>
                     <FormControl>
                       <Input type="number" placeholder="0.00" {...field} />
                     </FormControl>
@@ -345,7 +345,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                         <SelectItem value={NONE_SELECT_VALUE}>No Payment Type</SelectItem>
                         {paymentTypes.map(plan => (
                           <SelectItem key={plan.id} value={plan.id}>
-                            {plan.name} (₹{plan.amount}/{plan.frequency})
+                            {plan.name} (INR{plan.amount}/{plan.frequency})
                           </SelectItem>
                         ))}
                       </SelectContent>

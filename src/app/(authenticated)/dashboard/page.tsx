@@ -70,7 +70,7 @@ export default function DashboardPage() {
         />
         <DashboardCard
           title="Monthly Earnings"
-          value={`₹${summary.monthlyIncome.toLocaleString()}`}
+          value={`INR${summary.monthlyIncome.toLocaleString()}`}
           icon={TrendingUp}
           description="Earnings this month"
           className="bg-card"
@@ -92,7 +92,7 @@ export default function DashboardPage() {
                 <Tooltip
                   contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))' }}
                   labelStyle={{ color: 'hsl(var(--foreground))' }}
-                  formatter={(value: number) => `₹${value.toLocaleString()}`}
+                  formatter={(value: number) => `INR${value.toLocaleString()}`}
                 />
                 <Legend wrapperStyle={{ color: 'hsl(var(--foreground))' }}/>
                 <Bar dataKey="income" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Earnings"/>

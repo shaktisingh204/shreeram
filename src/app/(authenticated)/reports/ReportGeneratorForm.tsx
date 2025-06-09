@@ -103,12 +103,12 @@ export function ReportGeneratorForm() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                <div>
-                <Label htmlFor="expectedTotalFees">Total Expected Fees (₹)</Label>
+                <Label htmlFor="expectedTotalFees">Total Expected Fees (INR)</Label>
                 <Input id="expectedTotalFees" type="number" {...form.register("expectedTotalFees")} />
                 {form.formState.errors.expectedTotalFees && <p className="text-sm text-destructive mt-1">{form.formState.errors.expectedTotalFees.message}</p>}
               </div>
               <div>
-                <Label htmlFor="receivedTotalFees">Total Received Fees (₹)</Label>
+                <Label htmlFor="receivedTotalFees">Total Received Fees (INR)</Label>
                 <Input id="receivedTotalFees" type="number" {...form.register("receivedTotalFees")} />
                 {form.formState.errors.receivedTotalFees && <p className="text-sm text-destructive mt-1">{form.formState.errors.receivedTotalFees.message}</p>}
               </div>

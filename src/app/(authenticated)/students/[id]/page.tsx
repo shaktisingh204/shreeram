@@ -120,9 +120,9 @@ export default function StudentDetailPage() {
           </div>
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-foreground border-b pb-2 mb-2">Fee Details</h3>
-            <InfoItem icon={DollarSign} label="Amount to Pay" value={`₹${student.feesDue.toFixed(2)}`} className={student.feesDue > 0 ? "text-destructive font-bold" : ""} />
+            <InfoItem icon={DollarSign} label="Amount to Pay" value={`INR${student.feesDue.toFixed(2)}`} className={student.feesDue > 0 ? "text-destructive font-bold" : ""} />
             {student.lastPaymentDate && <InfoItem icon={CalendarDays} label="Last Payment" value={new Date(student.lastPaymentDate).toLocaleDateString()} />}
-            {paymentType && <InfoItem icon={Briefcase} label="Payment Type" value={`${paymentType.name} (₹${paymentType.amount}/${paymentType.frequency})`} />}
+            {paymentType && <InfoItem icon={Briefcase} label="Payment Type" value={`${paymentType.name} (INR${paymentType.amount}/${paymentType.frequency})`} />}
           </div>
            {student.idProofUrl && (
             <div className="md:col-span-2 space-y-2">
@@ -155,7 +155,7 @@ export default function StudentDetailPage() {
                   {payments.map((payment) => (
                     <TableRow key={payment.id}>
                       <TableCell>{new Date(payment.paymentDate).toLocaleDateString()}</TableCell>
-                      <TableCell>₹{payment.amount.toFixed(2)}</TableCell>
+                      <TableCell>INR{payment.amount.toFixed(2)}</TableCell>
                       <TableCell>{payment.notes || 'N/A'}</TableCell>
                     </TableRow>
                   ))}

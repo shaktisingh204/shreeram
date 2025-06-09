@@ -73,7 +73,7 @@ export function PaymentTypeForm({ initialData, onSubmit, isSubmitting, onCancel 
                 name="amount"
                 render={({ field }) => (
                     <FormItem>
-                    <FormLabel>Amount (₹)</FormLabel>
+                    <FormLabel>Amount (INR)</FormLabel>
                     <FormControl>
                         <Input type="number" placeholder="100" {...field} />
                     </FormControl>

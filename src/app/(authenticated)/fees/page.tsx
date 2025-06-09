@@ -155,7 +155,7 @@ export default function FeeCollectionPage() { // Renamed component
   
   const getStudentPaymentTypeName = (student: Student) => { // Renamed function
     const plan = paymentTypes.find(fp => fp.id === student.paymentTypeId);
-    return plan ? `${plan.name} (₹${plan.amount})` : 'No Plan';
+    return plan ? `${plan.name} (INR${plan.amount})` : 'No Plan';
   };
 
   if (loading) {
@@ -220,7 +220,7 @@ export default function FeeCollectionPage() { // Renamed component
                     <TableCell className="font-medium">{student.fullName}</TableCell>
                     <TableCell>{getStudentPaymentTypeName(student)}</TableCell>
                     <TableCell className={student.feesDue > 0 ? 'text-destructive font-semibold' : 'text-green-600'}>
-                      ₹{student.feesDue.toFixed(2)}
+                      INR{student.feesDue.toFixed(2)}
                     </TableCell>
                     <TableCell>{student.lastPaymentDate ? new Date(student.lastPaymentDate).toLocaleDateString() : 'N/A'}</TableCell>
                     <TableCell>
@@ -281,7 +281,7 @@ export default function FeeCollectionPage() { // Renamed component
           <form onSubmit={handlePaymentSubmit}>
             <div className="space-y-4 py-4">
               <div>
-                <Label htmlFor="amount">Amount (₹)</Label>
+                <Label htmlFor="amount">Amount (INR)</Label>
                 <Input
                   id="amount"
                   type="number"
@@ -342,7 +342,7 @@ export default function FeeCollectionPage() { // Renamed component
                   {getStudentPayments().map(p => (
                     <TableRow key={p.id}>
                       <TableCell>{new Date(p.paymentDate).toLocaleDateString()}</TableCell>
-                      <TableCell>₹{p.amount.toFixed(2)}</TableCell>
+                      <TableCell>INR{p.amount.toFixed(2)}</TableCell>
                       <TableCell>{p.notes || 'N/A'}</TableCell>
                     </TableRow>
                   ))}

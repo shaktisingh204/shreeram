@@ -24,7 +24,7 @@ export const mockSeats: Seat[] = Array.from({ length: 12 }, (_, i) => {
   };
 });
 
-export const mockStudents: Student[] = mockStudentsInitial.map(sInit => {
+export let mockStudents: Student[] = mockStudentsInitial.map(sInit => {
     const assignedSeat = mockSeats.find(seat => seat.studentId === sInit.id);
     const { tempSeatNumber, ...studentData } = sInit;
     return {
@@ -34,13 +34,13 @@ export const mockStudents: Student[] = mockStudentsInitial.map(sInit => {
 });
 
 
-export const mockPaymentTypes: PaymentType[] = [
+export let mockPaymentTypes: PaymentType[] = [
   { id: 'pt1', name: 'Standard Monthly', amount: 7500, frequency: 'monthly' },
   { id: 'pt2', name: 'Premium Monthly', amount: 11000, frequency: 'monthly' },
   { id: 'pt3', name: 'Basic Quarterly', amount: 20000, frequency: 'quarterly' },
 ];
 
-export const mockPayments: FeePayment[] = [
+export let mockPayments: FeePayment[] = [
   { id: 'payment1', studentId: '1', studentName: 'Alice Wonderland', amount: 7500, paymentDate: '2024-07-01', notes: 'July payment' },
   { id: 'payment2', studentId: '2', studentName: 'Bob The Builder', amount: 5000, paymentDate: '2024-06-01', notes: 'June partial payment' },
   { id: 'payment3', studentId: '4', studentName: 'Diana Prince', amount: 7500, paymentDate: '2024-07-05', notes: 'July payment' },
@@ -49,8 +49,27 @@ export const mockPayments: FeePayment[] = [
 
 // Simulate database operations
 export const getStudents = async (): Promise<Student[]> => {
-  await new Promise(resolve => setTimeout(resolve, 500));
-  return mockStudents.map(s => ({...s})); 
+  try {
+    // Fetch from the new API route
+    // Ensure the path is correct depending on where this function is called from.
+    // Assuming it's called client-side, '/api/students' will work.
+    // If called server-side during SSR/SSG, a full URL might be needed or direct function call.
+    // For now, assuming client-side.
+    const response = await fetch('/api/students');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to fetch students API:', response.status, errorText);
+      throw new Error(`Failed to fetch students: ${response.status}`);
+    }
+    const data = await response.json();
+    return data as Student[];
+  } catch (error) {
+    console.error("Error in getStudents:", error);
+    // Fallback to returning an empty array or re-throw to make the error visible.
+    // For development, re-throwing is often better.
+    // In a production app, you might return cached data or an empty list with a user notification.
+    throw error; 
+  }
 };
 
 export const getStudentById = async (id: string): Promise<Student | undefined> => {
@@ -77,20 +96,19 @@ export const addStudent = async (studentData: StudentDataInput): Promise<Student
   await new Promise(resolve => setTimeout(resolve, 500));
 
   let finalPhotoUrl: string | undefined = undefined;
-  if (typeof studentData.photo === 'string') {
+  if (typeof studentData.photo === 'string' && studentData.photo) {
     finalPhotoUrl = studentData.photo;
   } else if (studentData.photo instanceof File) {
     finalPhotoUrl = `https://placehold.co/100x100.png?text=${encodeURIComponent(studentData.photo.name.substring(0,10) || 'Photo')}`;
   }
 
   let finalIdProofUrl: string | undefined = undefined;
-  if (typeof studentData.idProof === 'string') {
+  if (typeof studentData.idProof === 'string' && studentData.idProof) {
     finalIdProofUrl = studentData.idProof;
   } else if (studentData.idProof instanceof File) {
     finalIdProofUrl = `https://placehold.co/200x150.png?text=${encodeURIComponent(studentData.idProof.name.substring(0,10) || 'ID')}_ID`;
   }
   
-  // Destructure to remove photo and idProof File objects if they exist, as they are not part of Student type
   const { photo, idProof, ...restStudentData } = studentData;
 
   const newStudent: Student = { 
@@ -99,7 +117,10 @@ export const addStudent = async (studentData: StudentDataInput): Promise<Student
     photoUrl: finalPhotoUrl,
     idProofUrl: finalIdProofUrl,
   };
-  mockStudents.push(newStudent);
+  
+  const currentStudents = [...mockStudents];
+  currentStudents.push(newStudent);
+  mockStudents = currentStudents; // Update the global mockStudents array
   
   if (newStudent.seatId) {
     const seat = mockSeats.find(s => s.id === newStudent.seatId);
@@ -123,18 +144,18 @@ export const updateStudent = async (id: string, updates: Partial<StudentDataInpu
   const originalStudentData = { ...mockStudents[studentIndex] };
   
   let finalPhotoUrl: string | undefined = originalStudentData.photoUrl;
-  if (updates.hasOwnProperty('photo')) {
+  if (updates.hasOwnProperty('photo')) { // Check if 'photo' key exists in updates
     if (typeof updates.photo === 'string') {
       finalPhotoUrl = updates.photo;
     } else if (updates.photo instanceof File) {
       finalPhotoUrl = `https://placehold.co/100x100.png?text=${encodeURIComponent(updates.photo.name.substring(0,10) || 'Photo')}`;
-    } else { // handles case where updates.photo is undefined (e.g. cleared file input)
+    } else { // handles case where updates.photo is explicitly undefined or null (e.g. cleared file input)
         finalPhotoUrl = undefined;
     }
   }
 
   let finalIdProofUrl: string | undefined = originalStudentData.idProofUrl;
-   if (updates.hasOwnProperty('idProof')) {
+   if (updates.hasOwnProperty('idProof')) { // Check if 'idProof' key exists
     if (typeof updates.idProof === 'string') {
       finalIdProofUrl = updates.idProof;
     } else if (updates.idProof instanceof File) {
@@ -146,7 +167,7 @@ export const updateStudent = async (id: string, updates: Partial<StudentDataInpu
 
   const { photo, idProof, ...restUpdates } = updates;
 
-  const updatedStudentData = { 
+  const updatedStudentData: Student = { 
     ...originalStudentData, 
     ...restUpdates,
     photoUrl: finalPhotoUrl,
@@ -156,7 +177,9 @@ export const updateStudent = async (id: string, updates: Partial<StudentDataInpu
   const newSeatId = updatedStudentData.seatId;
   const oldSeatId = originalStudentData.seatId;
 
+  // Only proceed with seat changes if seatId is actually different
   if (newSeatId !== oldSeatId) {
+    // Unassign from old seat if there was one
     if (oldSeatId) {
       const oldSeat = mockSeats.find(s => s.id === oldSeatId);
       if (oldSeat) {
@@ -165,12 +188,13 @@ export const updateStudent = async (id: string, updates: Partial<StudentDataInpu
         oldSeat.studentName = undefined;
       }
     }
+    // Assign to new seat if a new one is provided
     if (newSeatId) {
       const newSeat = mockSeats.find(s => s.id === newSeatId);
       if (!newSeat) {
         console.error(`Seat with ID ${newSeatId} not found during student update. Student ${id} will not be assigned to this seat.`);
         updatedStudentData.seatId = undefined; 
-      } else if (newSeat.isOccupied && newSeat.studentId !== id) {
+      } else if (newSeat.isOccupied && newSeat.studentId !== id) { // Check if new seat is occupied by someone else
         throw new Error(`Seat ${newSeat.seatNumber} (${newSeat.floor}) is already taken by ${newSeat.studentName}.`);
       } else {
         newSeat.isOccupied = true;
@@ -180,7 +204,10 @@ export const updateStudent = async (id: string, updates: Partial<StudentDataInpu
     }
   }
 
-  mockStudents[studentIndex] = updatedStudentData;
+
+  const currentStudents = [...mockStudents];
+  currentStudents[studentIndex] = updatedStudentData;
+  mockStudents = currentStudents; // Update the global mockStudents array
 
   return { ...mockStudents[studentIndex] };
 };
@@ -373,19 +400,22 @@ export const markFeesAsPaid = async (studentId: string): Promise<boolean> => {
 
 export const getDashboardSummary = async (): Promise<DashboardSummary> => {
   await new Promise(resolve => setTimeout(resolve, 100));
-  return {
-    totalStudents: mockStudents.filter(s => s.status !== 'inactive').length,
-    totalSeats: mockSeats.length,
-    availableSeats: mockSeats.filter(s => !s.isOccupied).length,
-    monthlyIncome: mockPayments.reduce((sum, p) => {
+  const activeStudents = mockStudents.filter(s => s.status !== 'inactive');
+  const totalIncomeThisMonth = mockPayments.reduce((sum, p) => {
       const paymentDate = new Date(p.paymentDate);
       const currentDate = new Date();
       if (paymentDate.getFullYear() === currentDate.getFullYear() && paymentDate.getMonth() === currentDate.getMonth()) {
         return sum + p.amount;
       }
       return sum;
-    }, 0),
-    studentsWithDues: mockStudents.filter(s => s.status === 'owing' && s.feesDue > 0).length,
+    }, 0);
+
+  return {
+    totalStudents: activeStudents.length,
+    totalSeats: mockSeats.length,
+    availableSeats: mockSeats.filter(s => !s.isOccupied).length,
+    monthlyIncome: totalIncomeThisMonth,
+    studentsWithDues: activeStudents.filter(s => s.feesDue > 0).length,
   };
 }
 
