@@ -6,7 +6,7 @@ import { getUsersMetadata, setUserMetadata, getLibrariesMetadata } from '@/lib/d
 import type { UserMetadata, LibraryMetadata } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { PlusCircle, Edit, Loader2, UsersRound, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { PlusCircle, Edit, Loader2, UsersRound, ShieldCheck, ShieldAlert, LogIn } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { UserForm, type UserFormValues } from './UserForm';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -14,9 +14,11 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/context/AuthContext';
 import { createManagerAction } from './actions';
+import { useRouter } from 'next/navigation';
 
 export default function ManageUsersPage() {
-  const { isSuperAdmin, loading: authLoading } = useAuth();
+  const { user: authUser, isSuperAdmin, loading: authLoading, switchLibraryContext } = useAuth();
+  const router = useRouter();
   const [users, setUsers] = useState<UserMetadata[]>([]);
   const [libraries, setLibraries] = useState<LibraryMetadata[]>([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -74,7 +76,6 @@ export default function ManageUsersPage() {
         await setUserMetadata(editingUser.id, metadataToSet);
         toast({ title: "Success", description: `Manager ${values.displayName} updated.` });
       } else if (formMode === 'add') {
-        // Password is asserted to be present by the form's Zod schema for 'add' mode
         const result = await createManagerAction({
             email: values.email,
             password: values.password!, 
@@ -96,6 +97,24 @@ export default function ManageUsersPage() {
       toast({ title: "Error", description: (error as Error).message || "Failed to save user.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleImpersonateManager = async (manager: UserMetadata) => {
+    if (!isSuperAdmin) {
+      toast({ title: "Error", description: "Only superadmins can impersonate managers.", variant: "destructive" });
+      return;
+    }
+    if (!manager.assignedLibraryId) {
+      toast({ title: "Error", description: "Manager does not have an assigned library.", variant: "destructive" });
+      return;
+    }
+    try {
+      await switchLibraryContext(manager.assignedLibraryId);
+      toast({ title: "Context Switched", description: `Viewing as ${manager.displayName} for library: ${manager.assignedLibraryName || manager.assignedLibraryId}.` });
+      router.push('/dashboard');
+    } catch (error) {
+      toast({ title: "Error", description: "Could not switch library context.", variant: "destructive" });
     }
   };
   
@@ -192,10 +211,15 @@ export default function ManageUsersPage() {
                         </Badge>
                     </TableCell>
                     <TableCell>{user.role === 'manager' ? (user.assignedLibraryName || getLibraryName(user.assignedLibraryId)) : 'All (Superadmin)'}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right space-x-2">
                         {user.role !== 'superadmin' && ( 
-                             <Button variant="ghost" size="sm" onClick={() => handleEditClick(user)}>
+                             <Button variant="outline" size="sm" onClick={() => handleEditClick(user)}>
                                 <Edit className="mr-2 h-4 w-4" /> Edit
+                            </Button>
+                        )}
+                        {isSuperAdmin && user.role === 'manager' && user.id !== authUser?.uid && user.assignedLibraryId && (
+                            <Button variant="ghost" size="sm" onClick={() => handleImpersonateManager(user)} title={`Impersonate ${user.displayName}`}>
+                                <LogIn className="mr-2 h-4 w-4 text-accent" /> Impersonate
                             </Button>
                         )}
                     </TableCell>

@@ -3,14 +3,15 @@
 
 import { useEffect, useState } from 'react';
 import { DashboardCard } from '@/components/DashboardCard';
-import { getDashboardSummary } from '@/lib/data';
-import type { DashboardSummary } from '@/types';
-import { Users, Armchair, TrendingUp, AlertTriangle, DollarSign, Loader2 } from 'lucide-react';
+import { getDashboardSummary, getUsersMetadata } from '@/lib/data'; // Added getUsersMetadata
+import type { DashboardSummary, UserMetadata } from '@/types'; // Added UserMetadata
+import { Users, Armchair, TrendingUp, AlertTriangle, DollarSign, Loader2, LogIn, Library as LibraryIcon } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const sampleMonthlyData = [
   { name: 'Jan', income: 40000, expenses: 24000 },
@@ -24,38 +25,76 @@ const sampleMonthlyData = [
 
 
 export default function DashboardPage() {
-  const { user, userMetadata, currentLibraryId, currentLibraryName, loading: authLoading } = useAuth();
+  const { user, userMetadata, currentLibraryId, currentLibraryName, loading: authLoading, isSuperAdmin, switchLibraryContext } = useAuth();
   const router = useRouter();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [managers, setManagers] = useState<UserMetadata[]>([]); // For superadmin to list managers
   const [loadingData, setLoadingData] = useState(true);
+  const [loadingManagers, setLoadingManagers] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
-      if (authLoading) { // Still waiting for auth context to resolve
-        setLoadingData(true); // Keep local loading true
+      if (authLoading) { 
+        setLoadingData(true);
+        if (isSuperAdmin) setLoadingManagers(true);
         return;
       }
 
-      if (!currentLibraryId) { // Auth resolved, but no library context
-        setLoadingData(false); // Stop local loading, context issue will be handled
-        return;
+      if (!currentLibraryId && user) { // User authenticated, but no library context yet (could be superadmin without a selection)
+         if (isSuperAdmin && userMetadata?.assignedLibraryId) {
+            // Superadmin might have an assigned default, try to load that first
+            // but actual selection happens in header. Data fetching for summary should wait for currentLibraryId
+         } else {
+            setLoadingData(false); 
+            if (isSuperAdmin) setLoadingManagers(false);
+            return;
+         }
       }
       
-      setLoadingData(true); // Auth resolved, library context exists, start fetching dashboard data
+      setLoadingData(true); 
       try {
-        const data = await getDashboardSummary(currentLibraryId);
-        setSummary(data);
+        if (currentLibraryId) { // Only fetch summary if a library context is set
+          const data = await getDashboardSummary(currentLibraryId);
+          setSummary(data);
+        } else if (!isSuperAdmin) { // Manager without library context is an error
+            setSummary(null);
+        }
+        // If superadmin and no currentLibraryId, summary remains null, but manager list can load
       } catch (error) {
         console.error("Failed to fetch dashboard summary:", error);
         setSummary(null); 
       } finally {
         setLoadingData(false);
       }
+
+      if (isSuperAdmin) {
+        setLoadingManagers(true);
+        try {
+          const allUsers = await getUsersMetadata();
+          setManagers(allUsers.filter(u => u.role === 'manager' && u.assignedLibraryId && u.assignedLibraryName));
+        } catch (error) {
+          console.error("Failed to fetch managers:", error);
+          setManagers([]);
+        } finally {
+          setLoadingManagers(false);
+        }
+      }
     };
     fetchData();
-  }, [currentLibraryId, authLoading]);
+  }, [currentLibraryId, authLoading, isSuperAdmin, user, userMetadata]);
 
-  if (authLoading || loadingData) {
+  const handleImpersonateManager = async (manager: UserMetadata) => {
+    if (!isSuperAdmin || !manager.assignedLibraryId) return;
+    try {
+      await switchLibraryContext(manager.assignedLibraryId);
+      // router.push('/dashboard'); // No need to push, useEffect on currentLibraryId will re-fetch
+    } catch (error) {
+      console.error("Failed to switch context for manager impersonation:", error);
+    }
+  };
+
+
+  if (authLoading || loadingData || (isSuperAdmin && loadingManagers)) {
     return (
       <div className="flex justify-center items-center h-full">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -63,33 +102,39 @@ export default function DashboardPage() {
     );
   }
   
-  if (!currentLibraryId && user) { // User is authenticated, but no library context
+  if (!currentLibraryId && user && !isSuperAdmin) { // Manager is authenticated, but no library context (config error)
      return (
       <div className="flex flex-col justify-center items-center h-full text-center p-4">
         <AlertTriangle className="h-16 w-16 text-destructive mb-4" />
         <p className="text-2xl font-semibold text-destructive">Configuration Incomplete</p>
         <p className="text-muted-foreground mt-2">
-          Your user account is authenticated, but essential configuration (like role or library assignment) is missing or couldn't be loaded.
+          Your manager account is authenticated, but essential configuration (like library assignment) is missing.
         </p>
-        {!userMetadata && (
-          <p className="text-sm text-muted-foreground mt-3">
-            This usually means your user metadata is not set up correctly in the database.
-          </p>
-        )}
-        <p className="text-sm text-muted-foreground mt-3">
-          If you are the <strong>Super Admin</strong>, please ensure:
-        </p>
-        <ul className="text-sm text-muted-foreground list-disc list-inside mt-1">
-          <li>Your UID in <code>firebase-demo-data.json</code> (under <code>users_metadata</code>) is correct for user <code>{user.email}</code>.</li>
-          <li>The <code>firebase-demo-data.json</code> file has been correctly imported into Firebase Realtime Database.</li>
-        </ul>
          <p className="text-sm text-muted-foreground mt-3">
-          If you are a <strong>Manager</strong>, please contact your superadmin for assistance.
+          Please contact your superadmin for assistance.
         </p>
       </div>
     );
   }
   
+  // Superadmin view when no library is selected (e.g. first load, or no libraries exist)
+  if (isSuperAdmin && !currentLibraryId) {
+     return (
+      <div className="space-y-6">
+        <h1 className="text-3xl font-headline font-bold text-primary">Dashboard (Superadmin Overview)</h1>
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle className="font-headline text-primary">Select a Library Context</CardTitle>
+            <CardDescription>Please select a library from the header dropdown to view its specific dashboard. Below you can quickly switch to a manager's library context.</CardDescription>
+          </CardHeader>
+        </Card>
+        {isSuperAdmin && (
+          <ManagerContextSwitcherCard managers={managers} onImpersonate={handleImpersonateManager} isLoading={loadingManagers} />
+        )}
+      </div>
+    )
+  }
+
   if (!summary && currentLibraryId) { // Library context exists, but failed to fetch summary
      return (
       <div className="flex flex-col justify-center items-center h-full text-center">
@@ -100,7 +145,7 @@ export default function DashboardPage() {
     );
   }
   
-  if (!summary) { // Catch-all if summary is null for any other reason after loading
+  if (!summary) { // Catch-all if summary is null for any other reason after loading (e.g. manager has no lib)
       return (
         <div className="flex justify-center items-center h-full">
            <p className="text-muted-foreground">No dashboard data to display.</p>
@@ -144,11 +189,11 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="shadow-lg">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="shadow-lg lg:col-span-2">
           <CardHeader>
             <CardTitle className="font-headline text-primary">Monthly Overview</CardTitle>
-            <CardDescription>Earnings and spending trend.</CardDescription>
+            <CardDescription>Earnings and spending trend for {summary.libraryName || currentLibraryName}.</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
@@ -168,28 +213,113 @@ export default function DashboardPage() {
             </ResponsiveContainer>
           </CardContent>
         </Card>
-
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle className="font-headline text-primary">Fees Due</CardTitle>
-            <CardDescription>Students with payments to be made.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-center p-8">
-              <AlertTriangle className="h-16 w-16 text-destructive mr-4" />
-              <div>
-                <p className="text-4xl font-bold text-destructive">{summary.studentsWithDues}</p>
-                <p className="text-muted-foreground">Students need to pay</p>
-              </div>
-            </div>
-             <div className="mt-4 text-center">
-                <DollarSign className="h-10 w-10 text-green-500 inline-block" />
-                <p className="text-xl font-semibold text-green-600">All fees collected for today!</p>
-                <p className="text-sm text-muted-foreground">This is a placeholder. Real logic for fees due today vs collected to be implemented.</p>
-            </div>
-          </CardContent>
-        </Card>
+        
+        {isSuperAdmin ? (
+           <ManagerContextSwitcherCard managers={managers} onImpersonate={handleImpersonateManager} isLoading={loadingManagers} />
+        ) : (
+            <Card className="shadow-lg">
+            <CardHeader>
+                <CardTitle className="font-headline text-primary">Fees Due</CardTitle>
+                <CardDescription>Students with payments to be made.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="flex items-center justify-center p-8">
+                <AlertTriangle className="h-16 w-16 text-destructive mr-4" />
+                <div>
+                    <p className="text-4xl font-bold text-destructive">{summary.studentsWithDues}</p>
+                    <p className="text-muted-foreground">Students need to pay</p>
+                </div>
+                </div>
+                <div className="mt-4 text-center">
+                    <DollarSign className="h-10 w-10 text-green-500 inline-block" />
+                    <p className="text-xl font-semibold text-green-600">All fees collected for today!</p>
+                    <p className="text-sm text-muted-foreground">This is a placeholder. Real logic for fees due today vs collected to be implemented.</p>
+                </div>
+            </CardContent>
+            </Card>
+        )}
       </div>
+      {/* If not super admin, show the fees due card in its original place (if lg:grid-cols-2 was used) */}
+       {!isSuperAdmin && (
+         <div className="grid gap-6 md:grid-cols-2">
+            <div></div> {/* Empty div to occupy space of the barchart if needed for layout consistency, or remove if Monthly Overview takes full width */}
+            <Card className="shadow-lg">
+                <CardHeader>
+                    <CardTitle className="font-headline text-primary">Fees Due</CardTitle>
+                    <CardDescription>Students with payments to be made.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center justify-center p-8">
+                    <AlertTriangle className="h-16 w-16 text-destructive mr-4" />
+                    <div>
+                        <p className="text-4xl font-bold text-destructive">{summary.studentsWithDues}</p>
+                        <p className="text-muted-foreground">Students need to pay</p>
+                    </div>
+                    </div>
+                    <div className="mt-4 text-center">
+                        <DollarSign className="h-10 w-10 text-green-500 inline-block" />
+                        <p className="text-xl font-semibold text-green-600">All fees collected for today!</p>
+                        <p className="text-sm text-muted-foreground">This is a placeholder. Real logic for fees due today vs collected to be implemented.</p>
+                    </div>
+                </CardContent>
+            </Card>
+         </div>
+       )}
+
+
     </div>
+  );
+}
+
+
+interface ManagerContextSwitcherCardProps {
+  managers: UserMetadata[];
+  onImpersonate: (manager: UserMetadata) => void;
+  isLoading: boolean;
+}
+
+function ManagerContextSwitcherCard({ managers, onImpersonate, isLoading }: ManagerContextSwitcherCardProps) {
+  return (
+    <Card className="shadow-lg">
+      <CardHeader>
+        <CardTitle className="font-headline text-primary">Manager Library Contexts</CardTitle>
+        <CardDescription>Quickly switch to view as a specific manager.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex justify-center items-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : managers.length > 0 ? (
+          <ScrollArea className="h-[250px]">
+            <ul className="space-y-3">
+              {managers.map(manager => (
+                <li key={manager.id} className="flex items-center justify-between p-2 border rounded-md hover:bg-muted/50">
+                  <div>
+                    <p className="font-medium">{manager.displayName}</p>
+                    <p className="text-sm text-muted-foreground flex items-center">
+                      <LibraryIcon className="h-3 w-3 mr-1.5 text-accent"/>
+                      {manager.assignedLibraryName || "N/A"}
+                    </p>
+                  </div>
+                  {manager.assignedLibraryId && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => onImpersonate(manager)}
+                      title={`View as ${manager.displayName}`}
+                    >
+                      <LogIn className="mr-2 h-4 w-4 text-accent" /> View
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </ScrollArea>
+        ) : (
+          <p className="text-muted-foreground text-center py-8">No managers found.</p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
