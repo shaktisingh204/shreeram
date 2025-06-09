@@ -6,7 +6,7 @@ import { getSeats, assignSeat as assignSeatAction, unassignSeat as unassignSeatA
 import type { Seat, Student } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Armchair, UserX, UserCheck, Loader2, PlusCircle, Edit, Trash2, MoreHorizontal } from 'lucide-react';
+import { Armchair, UserX, UserCheck, Loader2, PlusCircle, Edit, Trash2, MoreHorizontal, AlertTriangle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -39,11 +39,16 @@ import {
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { SeatForm, type SeatFormValues } from './SeatForm';
+import { useAuth } from '@/context/AuthContext';
+import { useRouter } from 'next/navigation';
+
 
 export default function SeatsPage() {
+  const { currentLibraryId, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [allSeats, setAllSeats] = useState<Seat[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingData, setLoadingData] = useState(true);
   
   const [selectedSeatForAssignment, setSelectedSeatForAssignment] = useState<Seat | null>(null);
   const [selectedStudentIdForAssignment, setSelectedStudentIdForAssignment] = useState<string | undefined>(undefined);
@@ -60,22 +65,27 @@ export default function SeatsPage() {
   const { toast } = useToast();
 
   const fetchAllData = async () => {
-    setLoading(true);
+    if (!currentLibraryId) return;
+    setLoadingData(true);
     try {
-      const seatData = await getSeats();
-      const studentData = await getStudents();
+      const seatData = await getSeats(currentLibraryId);
+      const studentData = await getStudents(currentLibraryId);
       setAllSeats(seatData);
       setStudents(studentData.filter(s => s.status !== 'inactive'));
     } catch (error) {
         toast({ title: "Error", description: "Failed to fetch data.", variant: "destructive" });
     } finally {
-        setLoading(false);
+        setLoadingData(false);
     }
   };
 
   useEffect(() => {
-    fetchAllData();
-  }, []);
+    if (!authLoading && currentLibraryId) {
+        fetchAllData();
+    } else if (!authLoading && !currentLibraryId) {
+        setLoadingData(false); // No library selected, stop loading
+    }
+  }, [currentLibraryId, authLoading]);
 
   const seatsByFloor = useMemo(() => {
     return allSeats.reduce((acc, seat) => {
@@ -95,13 +105,13 @@ export default function SeatsPage() {
   };
   
   const handleAssignSeat = async () => {
-    if (!selectedSeatForAssignment || !selectedStudentIdForAssignment) {
+    if (!currentLibraryId || !selectedSeatForAssignment || !selectedStudentIdForAssignment) {
       toast({ title: "Error", description: "Please select a seat and a student.", variant: "destructive" });
       return;
     }
     setIsSubmitting(true);
     try {
-      await assignSeatAction(selectedStudentIdForAssignment, selectedSeatForAssignment.id);
+      await assignSeatAction(currentLibraryId, selectedStudentIdForAssignment, selectedSeatForAssignment.id);
       toast({ title: "Success", description: `Seat ${selectedSeatForAssignment.seatNumber} (${selectedSeatForAssignment.floor}) assigned.` });
       await fetchAllData();
       setIsAssignDialogOpen(false);
@@ -112,13 +122,13 @@ export default function SeatsPage() {
   };
   
   const handleUnassignSeat = async () => {
-    if (!selectedSeatForAssignment || !selectedSeatForAssignment.studentId) {
+    if (!currentLibraryId || !selectedSeatForAssignment || !selectedSeatForAssignment.studentId) {
       toast({ title: "Error", description: "This seat is already vacant.", variant: "destructive" });
       return;
     }
     setIsSubmitting(true);
     try {
-      await unassignSeatAction(selectedSeatForAssignment.id);
+      await unassignSeatAction(currentLibraryId, selectedSeatForAssignment.id);
       toast({ title: "Success", description: `Seat ${selectedSeatForAssignment.seatNumber} (${selectedSeatForAssignment.floor}) is now empty.` });
       await fetchAllData();
       setIsAssignDialogOpen(false);
@@ -141,13 +151,14 @@ export default function SeatsPage() {
   };
 
   const handleSeatFormSubmit = async (values: SeatFormValues) => {
+    if (!currentLibraryId) return;
     setIsSubmitting(true);
     try {
       if (seatFormDialogMode === 'edit' && editingSeat) {
-        await updateSeatDetails(editingSeat.id, values);
+        await updateSeatDetails(currentLibraryId, editingSeat.id, values);
         toast({ title: "Success", description: "Seat updated successfully." });
       } else {
-        await addSeat(values);
+        await addSeat(currentLibraryId, values);
         toast({ title: "Success", description: "Seat added successfully." });
       }
       await fetchAllData();
@@ -165,10 +176,10 @@ export default function SeatsPage() {
   };
 
   const handleDeleteSeat = async () => {
-    if (!seatToDelete) return;
+    if (!currentLibraryId || !seatToDelete) return;
     setIsSubmitting(true);
     try {
-      await deleteSeatAction(seatToDelete.id);
+      await deleteSeatAction(currentLibraryId, seatToDelete.id);
       toast({ title: "Success", description: `Seat ${seatToDelete.seatNumber} (${seatToDelete.floor}) deleted.` });
       await fetchAllData();
       setIsDeleteConfirmOpen(false);
@@ -179,14 +190,26 @@ export default function SeatsPage() {
       setIsSubmitting(false);
     }
   };
-
-  if (loading) {
+  
+  if (authLoading || loadingData) {
     return (
       <div className="flex justify-center items-center h-full">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
     );
   }
+
+  if (!currentLibraryId) {
+    return (
+      <div className="flex flex-col justify-center items-center h-full text-center">
+        <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+        <p className="text-xl font-semibold">No Library Selected</p>
+        <p className="text-muted-foreground">Please select a library context to manage seats.</p>
+        <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
+      </div>
+    );
+  }
+
 
   const studentsForAssignmentDropdown = students.filter(s => !s.seatId || s.id === selectedSeatForAssignment?.studentId);
   const defaultAccordionOpen = Object.keys(seatsByFloor).length > 0 ? [Object.keys(seatsByFloor)[0]] : [];
@@ -274,11 +297,11 @@ export default function SeatsPage() {
         <Card className="shadow-xl">
             <CardHeader>
                 <CardTitle>No Seats Found</CardTitle>
-                <CardDescription>Start by adding floors and seats.</CardDescription>
+                <CardDescription>Start by adding floors and seats for this library.</CardDescription>
             </CardHeader>
             <CardContent className="text-center py-8">
                  <Armchair className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">No seats have been configured yet.</p>
+                <p className="text-muted-foreground">No seats have been configured yet for this library.</p>
                 <Button className="mt-4" onClick={openAddSeatDialog}>
                     <PlusCircle className="mr-2 h-4 w-4" /> Add First Seat
                 </Button>

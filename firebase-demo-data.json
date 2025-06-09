@@ -1,5 +1,13 @@
 
 {
+  "users_metadata": {
+    "YOUR_ADMIN_FIREBASE_UID_HERE": {
+      "id": "YOUR_ADMIN_FIREBASE_UID_HERE",
+      "email": "admin@shreeram.com",
+      "displayName": "Super Admin",
+      "role": "superadmin"
+    }
+  },
   "libraries_metadata": {
     "library_main": {
       "id": "library_main",

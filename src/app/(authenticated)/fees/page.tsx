@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from '@/hooks/use-toast';
-import { DollarSign, PlusCircle, CheckCircle, Loader2, History, Search, MoreHorizontal } from 'lucide-react';
+import { DollarSign, PlusCircle, CheckCircle, Loader2, History, Search, MoreHorizontal, AlertTriangle } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +35,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { useAuth } from '@/context/AuthContext';
+import { useRouter } from 'next/navigation';
 
 
 interface PaymentFormData {
@@ -44,11 +46,13 @@ interface PaymentFormData {
   notes?: string;
 }
 
-export default function FeeCollectionPage() { // Renamed component
+export default function FeeCollectionPage() {
+  const { currentLibraryId, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [students, setStudents] = useState<Student[]>([]);
   const [payments, setPayments] = useState<FeePayment[]>([]);
-  const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]); // Renamed state
-  const [loading, setLoading] = useState(true);
+  const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [currentStudent, setCurrentStudent] = useState<Student | null>(null);
@@ -65,31 +69,36 @@ export default function FeeCollectionPage() { // Renamed component
 
 
   const fetchData = async () => {
-    setLoading(true);
+    if(!currentLibraryId) return;
+    setLoadingData(true);
     try {
-      const studentData = await getStudents();
-      const paymentData = await getPayments();
-      const paymentTypeData = await getPaymentTypes(); // Renamed function
+      const studentData = await getStudents(currentLibraryId);
+      const paymentData = await getPayments(currentLibraryId);
+      const paymentTypeData = await getPaymentTypes(currentLibraryId);
       setStudents(studentData);
       setPayments(paymentData);
       setPaymentTypes(paymentTypeData);
     } catch (error) {
       toast({ title: "Error", description: "Failed to fetch data.", variant: "destructive" });
     } finally {
-      setLoading(false);
+      setLoadingData(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!authLoading && currentLibraryId) {
+        fetchData();
+    } else if (!authLoading && !currentLibraryId) {
+        setLoadingData(false);
+    }
+  }, [currentLibraryId, authLoading]);
 
   const filteredStudents = useMemo(() => {
     return students.filter(student => {
       const nameMatch = student.fullName.toLowerCase().includes(searchTerm.toLowerCase());
       let statusMatch = true;
-      if (statusFilter === 'hasDues') statusMatch = student.feesDue > 0 && student.status !== 'inactive'; // Renamed filter value
-      else if (statusFilter === 'allPaid') statusMatch = student.feesDue === 0 && student.status === 'enrolled'; // Renamed filter value
+      if (statusFilter === 'hasDues') statusMatch = student.feesDue > 0 && student.status !== 'inactive';
+      else if (statusFilter === 'allPaid') statusMatch = student.feesDue === 0 && student.status === 'enrolled';
       else if (statusFilter === 'inactive') statusMatch = student.status === 'inactive';
       
       return nameMatch && statusMatch;
@@ -99,7 +108,7 @@ export default function FeeCollectionPage() { // Renamed component
 
   const openPaymentDialog = (student: Student) => {
     setCurrentStudent(student);
-    const studentPaymentType = paymentTypes.find(fp => fp.id === student.paymentTypeId); // Renamed variable
+    const studentPaymentType = paymentTypes.find(fp => fp.id === student.paymentTypeId);
     setPaymentFormData({
       studentId: student.id,
       amount: student.feesDue > 0 ? student.feesDue : (studentPaymentType?.amount || 0),
@@ -116,10 +125,10 @@ export default function FeeCollectionPage() { // Renamed component
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentStudent) return;
+    if (!currentStudent || !currentLibraryId) return;
     setIsSubmitting(true);
     try {
-      await addPayment({
+      await addPayment(currentLibraryId, {
         studentId: currentStudent.id,
         amount: Number(paymentFormData.amount), 
         paymentDate: paymentFormData.paymentDate,
@@ -136,9 +145,10 @@ export default function FeeCollectionPage() { // Renamed component
   };
 
   const markAsPaid = async (studentId: string) => {
+    if (!currentLibraryId) return;
     setIsSubmitting(true);
     try {
-      await markFeesAsPaidAction(studentId);
+      await markFeesAsPaidAction(currentLibraryId, studentId);
       toast({ title: "Success", description: "Dues cleared." });
       await fetchData(); 
     } catch (error) {
@@ -153,15 +163,26 @@ export default function FeeCollectionPage() { // Renamed component
     return payments.filter(p => p.studentId === currentStudent.id).sort((a,b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime());
   };
   
-  const getStudentPaymentTypeName = (student: Student) => { // Renamed function
+  const getStudentPaymentTypeName = (student: Student) => {
     const plan = paymentTypes.find(fp => fp.id === student.paymentTypeId);
     return plan ? `${plan.name} (INR${plan.amount})` : 'No Plan';
   };
-
-  if (loading) {
+  
+  if (authLoading || loadingData) {
     return (
       <div className="flex justify-center items-center h-full">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!currentLibraryId) {
+    return (
+      <div className="flex flex-col justify-center items-center h-full text-center">
+        <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+        <p className="text-xl font-semibold">No Library Selected</p>
+        <p className="text-muted-foreground">Please select a library context to manage fees.</p>
+        <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
       </div>
     );
   }
@@ -198,7 +219,7 @@ export default function FeeCollectionPage() { // Renamed component
       <Card className="shadow-xl">
         <CardHeader>
           <CardTitle>Student Fee Status</CardTitle>
-          <CardDescription>See student payments and amounts to pay.</CardDescription>
+          <CardDescription>See student payments and amounts to pay for the current library.</CardDescription>
         </CardHeader>
         <CardContent>
         {filteredStudents.length > 0 ? (
@@ -305,7 +326,7 @@ export default function FeeCollectionPage() { // Renamed component
                 <Label htmlFor="notes">Notes (Optional)</Label>
                 <Textarea
                   id="notes"
-                  value={paymentFormData.notes}
+                  value={paymentFormData.notes ?? ""}
                   onChange={(e) => setPaymentFormData({ ...paymentFormData, notes: e.target.value })}
                 />
               </div>
@@ -362,6 +383,3 @@ export default function FeeCollectionPage() { // Renamed component
     </div>
   );
 }
-
-
-      

@@ -2,50 +2,62 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { StudentForm, type StudentSubmitValues } from '@/components/students/StudentForm'; // Updated import
+import { StudentForm, type StudentSubmitValues } from '@/components/students/StudentForm';
 import { getStudentById, updateStudent } from '@/lib/data';
 import type { Student } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 interface EditStudentPageProps {
   params: { id: string };
 }
 
 export default function EditStudentPage({ params }: EditStudentPageProps) {
+  const { currentLibraryId, loading: authLoading } = useAuth();
   const [student, setStudent] = useState<Student | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadingData, setLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
   const studentId = params.id;
 
   useEffect(() => {
-    if (studentId) {
+    if (studentId && currentLibraryId && !authLoading) {
       const fetchStudent = async () => {
-        setLoading(true);
-        const data = await getStudentById(studentId as string);
-        if (data) {
-          setStudent(data);
-        } else {
-          toast({
-            title: "Error",
-            description: "Student not found.",
-            variant: "destructive",
-          });
-          router.push('/students');
+        setLoadingData(true);
+        try {
+            const data = await getStudentById(currentLibraryId, studentId as string);
+            if (data) {
+            setStudent(data);
+            } else {
+            toast({
+                title: "Error",
+                description: "Student not found in the current library context.",
+                variant: "destructive",
+            });
+            router.push('/students');
+            }
+        } catch (error) {
+            toast({ title: "Error fetching student", description: (error as Error).message, variant: "destructive" });
+            router.push('/students');
+        } finally {
+            setLoadingData(false);
         }
-        setLoading(false);
       };
       fetchStudent();
     }
-  }, [studentId, toast, router]);
+  }, [studentId, currentLibraryId, authLoading, toast, router]);
 
-  const handleSubmit = async (values: StudentSubmitValues) => { // Updated type
+  const handleSubmit = async (values: StudentSubmitValues) => {
+    if (!currentLibraryId) {
+      toast({ title: "Error", description: "No library context selected.", variant: "destructive" });
+      return;
+    }
     setIsSubmitting(true);
     try {
-      await updateStudent(studentId as string, values); // updateStudent now expects StudentSubmitValues compatible type
+      await updateStudent(currentLibraryId, studentId as string, values);
       toast({
         title: "Success",
         description: "Student details saved.",
@@ -64,16 +76,27 @@ export default function EditStudentPage({ params }: EditStudentPageProps) {
     }
   };
 
-  if (loading) {
+  if (authLoading || loadingData) {
     return (
       <div className="flex justify-center items-center h-full">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
     );
   }
+  
+  if (!currentLibraryId) {
+    return (
+      <div className="flex flex-col justify-center items-center h-full text-center">
+        <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+        <p className="text-xl font-semibold">Cannot Edit Student</p>
+        <p className="text-muted-foreground">A library context is required.</p>
+         <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
+      </div>
+    );
+  }
 
   if (!student) {
-    return <div className="text-center py-12">Student not found.</div>;
+    return <div className="text-center py-12">Student not found. Or you may not have access in the current library context.</div>;
   }
 
   return (
@@ -82,5 +105,3 @@ export default function EditStudentPage({ params }: EditStudentPageProps) {
     </div>
   );
 }
-
-    

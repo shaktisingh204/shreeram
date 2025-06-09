@@ -23,22 +23,34 @@ import {
   LogOut,
   Settings,
   BookOpenCheck,
-  Library, // Added for Manage Libraries
+  Library,
+  UsersRound, // Added for Manage Users
 } from 'lucide-react';
 
-const navItems = [
+const navItemsBase = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/students', label: 'Students', icon: Users },
   { href: '/seats', label: 'Seat Setup', icon: Armchair },
   { href: '/fees', label: 'Fee Collection', icon: DollarSign },
   { href: '/reports', label: 'Statements', icon: FileText },
   { href: '/fee-plans', label: 'Payment Types', icon: ListChecks },
-  { href: '/manage-libraries', label: 'Manage Libraries', icon: Library }, // New Item
 ];
+
+const superAdminNavItems = [
+  ...navItemsBase,
+  { href: '/manage-libraries', label: 'Manage Libraries', icon: Library },
+  { href: '/manage-users', label: 'Manage Users', icon: UsersRound },
+];
+
+const managerNavItems = navItemsBase;
+
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { logout } = useAuth();
+  const { logout, isSuperAdmin, isManager } = useAuth();
+
+  const navItems = isSuperAdmin ? superAdminNavItems : (isManager ? managerNavItems : []);
+
 
   return (
     <Sidebar collapsible="icon" variant="sidebar" side="left">

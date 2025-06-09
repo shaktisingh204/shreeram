@@ -8,6 +8,7 @@ import type { DashboardSummary } from '@/types';
 import { Users, Armchair, TrendingUp, AlertTriangle, DollarSign, Loader2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useAuth } from '@/context/AuthContext';
 
 const sampleMonthlyData = [
   { name: 'Jan', income: 40000, expenses: 24000 },
@@ -21,30 +22,49 @@ const sampleMonthlyData = [
 
 
 export default function DashboardPage() {
+  const { currentLibraryId, currentLibraryName, loading: authLoading } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
-      setLoading(true);
-      const data = await getDashboardSummary();
-      setSummary(data);
-      setLoading(false);
+      if (!currentLibraryId || authLoading) return;
+      setLoadingData(true);
+      try {
+        const data = await getDashboardSummary(currentLibraryId);
+        setSummary(data);
+      } catch (error) {
+        console.error("Failed to fetch dashboard summary:", error);
+        setSummary(null); // Or set some error state
+      } finally {
+        setLoadingData(false);
+      }
     };
     fetchData();
-  }, []);
+  }, [currentLibraryId, authLoading]);
 
-  if (loading || !summary) {
+  if (authLoading || loadingData || !currentLibraryId) {
     return (
       <div className="flex justify-center items-center h-full">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
     );
   }
+  
+  if (!summary) {
+     return (
+      <div className="flex flex-col justify-center items-center h-full text-center">
+        <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+        <p className="text-xl font-semibold">Could not load dashboard data.</p>
+        <p className="text-muted-foreground">Please ensure a library context is set or try again later.</p>
+      </div>
+    );
+  }
+
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-headline font-bold text-primary">Dashboard</h1>
+      <h1 className="text-3xl font-headline font-bold text-primary">Dashboard ({summary.libraryName || currentLibraryName || 'Overview'})</h1>
       
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <DashboardCard
@@ -65,8 +85,8 @@ export default function DashboardPage() {
           title="Available Seats"
           value={summary.availableSeats}
           icon={Armchair}
-          description={`${((summary.availableSeats / summary.totalSeats) * 100).toFixed(0)}% free`}
-          className={summary.availableSeats < summary.totalSeats * 0.1 ? "border-destructive" : "bg-card"}
+          description={`${summary.totalSeats > 0 ? ((summary.availableSeats / summary.totalSeats) * 100).toFixed(0) : 0}% free`}
+          className={summary.totalSeats > 0 && summary.availableSeats < summary.totalSeats * 0.1 ? "border-destructive" : "bg-card"}
         />
         <DashboardCard
           title="Monthly Earnings"

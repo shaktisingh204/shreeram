@@ -48,10 +48,21 @@ export interface DashboardSummary {
   availableSeats: number;
   monthlyIncome: number; // Monthly Earnings
   studentsWithDues: number; // Renamed from feesDueToday
+  libraryName?: string; // Added for context
 }
 
 export interface LibraryMetadata {
   id: string;
   name: string;
   createdAt: string; // ISO date string
+}
+
+export interface UserMetadata {
+  id: string; // Firebase UID
+  email: string;
+  role: 'superadmin' | 'manager';
+  displayName?: string;
+  mobileNumber?: string;
+  assignedLibraryId?: string; // Only for managers
+  assignedLibraryName?: string; // For display
 }

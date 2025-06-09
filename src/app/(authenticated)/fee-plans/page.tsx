@@ -2,17 +2,14 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { getPaymentTypes, addPaymentType, updatePaymentType } from '@/lib/data'; // Renamed functions
-import type { PaymentType } from '@/types'; // Renamed type
+import { getPaymentTypes, addPaymentType, updatePaymentType } from '@/lib/data';
+import type { PaymentType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { PlusCircle, Edit, Trash2, Loader2, MoreHorizontal, ListChecks } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, MoreHorizontal, ListChecks, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { PaymentTypeForm, type PaymentTypeFormValues } from './FeePlanForm'; // Component name will be updated in its own file
-import {
-  Dialog,
-  DialogContent,
-} from "@/components/ui/dialog";
+import { PaymentTypeForm, type PaymentTypeFormValues } from './FeePlanForm';
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,26 +17,40 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { useAuth } from '@/context/AuthContext';
+import { useRouter } from 'next/navigation';
 
 
-export default function PaymentTypesPage() { // Renamed component
-  const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]); // Renamed state
-  const [loading, setLoading] = useState(true);
+export default function PaymentTypesPage() {
+  const { currentLibraryId, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingPaymentType, setEditingPaymentType] = useState<PaymentType | undefined>(undefined); // Renamed state
+  const [editingPaymentType, setEditingPaymentType] = useState<PaymentType | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
   const fetchData = async () => {
-    setLoading(true);
-    const data = await getPaymentTypes(); // Renamed function
-    setPaymentTypes(data);
-    setLoading(false);
+    if (!currentLibraryId) return;
+    setLoadingData(true);
+    try {
+        const data = await getPaymentTypes(currentLibraryId);
+        setPaymentTypes(data);
+    } catch (error) {
+        toast({ title: "Error", description: "Failed to fetch payment types.", variant: "destructive" });
+    } finally {
+        setLoadingData(false);
+    }
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+     if (!authLoading && currentLibraryId) {
+        fetchData();
+    } else if (!authLoading && !currentLibraryId) {
+        setLoadingData(false);
+    }
+  }, [currentLibraryId, authLoading]);
 
   const handleAddClick = () => {
     setEditingPaymentType(undefined);
@@ -52,21 +63,24 @@ export default function PaymentTypesPage() { // Renamed component
   };
 
   const handleDeleteClick = async (planId: string) => {
+    // Add currentLibraryId check if deletePaymentType is library specific
     if (confirm("Are you sure you want to delete this payment type? This action cannot be undone.")) {
-        // In a real app, call deletePaymentType(planId)
+        // In a real app, call deletePaymentType(currentLibraryId, planId)
         setPaymentTypes(prevPlans => prevPlans.filter(p => p.id !== planId));
         toast({ title: "Success", description: "Payment type deleted (mock)." });
+        // await fetchData(); // if delete is implemented
     }
   };
 
   const handleFormSubmit = async (values: PaymentTypeFormValues) => {
+    if (!currentLibraryId) return;
     setIsSubmitting(true);
     try {
       if (editingPaymentType) {
-        await updatePaymentType(editingPaymentType.id, values); // Renamed function
+        await updatePaymentType(currentLibraryId, editingPaymentType.id, values);
         toast({ title: "Success", description: "Payment type updated." });
       } else {
-        await addPaymentType(values); // Renamed function
+        await addPaymentType(currentLibraryId, values);
         toast({ title: "Success", description: "Payment type added." });
       }
       await fetchData();
@@ -78,15 +92,26 @@ export default function PaymentTypesPage() { // Renamed component
       setIsSubmitting(false);
     }
   };
-
-  if (loading) {
+  
+  if (authLoading || loadingData) {
     return (
       <div className="flex justify-center items-center h-full">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
     );
   }
-  
+
+  if (!currentLibraryId) {
+     return (
+      <div className="flex flex-col justify-center items-center h-full text-center">
+        <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+        <p className="text-xl font-semibold">No Library Selected</p>
+        <p className="text-muted-foreground">Please select a library context to manage payment types.</p>
+        <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
+      </div>
+    );
+  }
+
   const getFrequencyDisplay = (frequency: PaymentType['frequency']) => {
     switch (frequency) {
       case 'monthly': return 'Every Month';
@@ -119,7 +144,7 @@ export default function PaymentTypesPage() { // Renamed component
       <Card className="shadow-xl">
         <CardHeader>
             <CardTitle>Existing Payment Types</CardTitle>
-            <CardDescription>Manage different payment options for students.</CardDescription>
+            <CardDescription>Manage different payment options for students in the current library.</CardDescription>
         </CardHeader>
         <CardContent>
             {paymentTypes.length > 0 ? (
@@ -167,7 +192,7 @@ export default function PaymentTypesPage() { // Renamed component
                 <ListChecks className="mx-auto h-12 w-12 text-muted-foreground" />
                 <h3 className="mt-2 text-xl font-semibold">No Payment Types Found</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                    Add a new payment type to start.
+                    Add a new payment type to start for this library.
                 </p>
                  <Button className="mt-4" onClick={handleAddClick}>
                     <PlusCircle className="mr-2 h-4 w-4" /> Add Payment Type

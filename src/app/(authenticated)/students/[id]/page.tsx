@@ -10,57 +10,61 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Edit, DollarSign, Loader2, User, Mail, StickyNote, Armchair, CalendarDays, Briefcase, Phone, Home, UserCircle2 } from 'lucide-react';
+import { ArrowLeft, Edit, DollarSign, Loader2, User, Mail, StickyNote, Armchair, CalendarDays, Briefcase, Phone, Home, UserCircle2, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useAuth } from '@/context/AuthContext';
 
 export default function StudentDetailPage() {
   const params = useParams();
   const router = useRouter();
   const studentId = params.id as string;
+  const { currentLibraryId, loading: authLoading } = useAuth();
 
   const [student, setStudent] = useState<Student | null>(null);
   const [assignedSeat, setAssignedSeat] = useState<Seat | null>(null);
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [paymentType, setPaymentType] = useState<PaymentType | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
-    if (studentId) {
+    if (studentId && currentLibraryId && !authLoading) {
       const fetchData = async () => {
-        setLoading(true);
+        setLoadingData(true);
         try {
-          const studentData = await getStudentById(studentId);
+          const studentData = await getStudentById(currentLibraryId, studentId);
           if (!studentData) {
+            toast({ title: "Not Found", description: "Student not found in this library.", variant: "destructive" });
             router.push('/students'); 
             return;
           }
           setStudent(studentData);
 
           if (studentData.seatId) {
-            const seatData = await getSeatById(studentData.seatId);
+            const seatData = await getSeatById(currentLibraryId, studentData.seatId);
             setAssignedSeat(seatData || null);
           } else {
             setAssignedSeat(null);
           }
 
-          const paymentData = await getPayments(); 
+          const paymentData = await getPayments(currentLibraryId); 
           setPayments(paymentData.filter(p => p.studentId === studentId));
 
           if (studentData.paymentTypeId) { 
-            const planData = await getPaymentTypeById(studentData.paymentTypeId); 
+            const planData = await getPaymentTypeById(currentLibraryId, studentData.paymentTypeId); 
             if (planData) setPaymentType(planData); 
           }
 
         } catch (error) {
           console.error("Error fetching student details:", error);
+          // Potentially show toast error
         } finally {
-          setLoading(false);
+          setLoadingData(false);
         }
       };
       fetchData();
     }
-  }, [studentId, router]);
+  }, [studentId, currentLibraryId, authLoading, router]);
   
   const getStatusBadgeVariant = (status: Student['status'] | undefined) => {
     if (!status) return 'outline';
@@ -71,17 +75,33 @@ export default function StudentDetailPage() {
       default: return 'outline';
     }
   };
+  
+  // Temporary toast for missing import
+  const toast = (opts: any) => console.log("Toast:", opts.title, opts.description);
 
-  if (loading) {
+
+  if (authLoading || loadingData) {
     return (
       <div className="flex justify-center items-center h-full">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
     );
   }
+  
+  if (!currentLibraryId) {
+    return (
+      <div className="flex flex-col justify-center items-center h-full text-center">
+        <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+        <p className="text-xl font-semibold">No Library Selected</p>
+        <p className="text-muted-foreground">A library context is required to view student details.</p>
+         <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
+      </div>
+    );
+  }
+
 
   if (!student) {
-    return <div className="text-center py-12">Student not found.</div>;
+    return <div className="text-center py-12">Student not found in the current library.</div>;
   }
 
   return (
@@ -191,4 +211,3 @@ function InfoItem({ icon: Icon, label, value, className }: InfoItemProps) {
     </div>
   );
 }
-

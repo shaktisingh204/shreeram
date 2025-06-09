@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { getStudents, getSeats } from '@/lib/data'; 
 import type { Student, Seat } from '@/types'; 
-import { PlusCircle, Search, Edit, Eye, Trash2, Loader2, MoreHorizontal } from 'lucide-react';
+import { PlusCircle, Search, Edit, Eye, Trash2, Loader2, MoreHorizontal, AlertTriangle } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,26 +23,36 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
+import { useAuth } from '@/context/AuthContext';
 
 export default function StudentsPage() {
+  const { currentLibraryId, loading: authLoading } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [seats, setSeats] = useState<Seat[]>([]); 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [loading, setLoading] = useState(true);
+  const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
-      setLoading(true);
-      const studentData = await getStudents();
-      const seatData = await getSeats(); 
-      setStudents(studentData);
-      setSeats(seatData); 
-      setLoading(false);
+      if (!currentLibraryId || authLoading) return;
+      setLoadingData(true);
+      try {
+        const studentData = await getStudents(currentLibraryId);
+        const seatData = await getSeats(currentLibraryId); 
+        setStudents(studentData);
+        setSeats(seatData); 
+      } catch (error) {
+        console.error("Failed to fetch students or seats:", error);
+        setStudents([]);
+        setSeats([]);
+      } finally {
+        setLoadingData(false);
+      }
     };
     fetchData();
-  }, []);
+  }, [currentLibraryId, authLoading]);
 
   const filteredStudents = useMemo(() => {
     return students.filter(student => {
@@ -85,10 +95,20 @@ export default function StudentsPage() {
     return seat ? `${seat.seatNumber} (${seat.floor})` : 'N/A';
   };
 
-  if (loading) {
+  if (authLoading || loadingData || !currentLibraryId) {
     return (
       <div className="flex justify-center items-center h-full">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+  
+  if (!currentLibraryId) {
+     return (
+      <div className="flex flex-col justify-center items-center h-full text-center">
+        <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+        <p className="text-xl font-semibold">No Library Selected</p>
+        <p className="text-muted-foreground">Please select a library context to view students.</p>
       </div>
     );
   }
