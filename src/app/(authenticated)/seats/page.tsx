@@ -92,7 +92,7 @@ export default function SeatsPage() {
 
   useEffect(() => {
     fetchAllData();
-  }, [currentLibraryId, authLoading]); // currentLibraryId ensures re-fetch on context switch
+  }, [currentLibraryId, authLoading, toast, currentLibraryName]); // Added currentLibraryName and toast
 
   const seatsByFloor = useMemo(() => {
     return allSeats.reduce((acc, seat) => {
@@ -331,8 +331,8 @@ export default function SeatsPage() {
             <DialogTitle>Update Seat: {selectedSeatForAssignment?.seatNumber} ({selectedSeatForAssignment?.floor})</DialogTitle>
             <DialogDescription>
               {selectedSeatForAssignment?.isOccupied 
-                ? `This seat in ${currentLibraryName} is taken by ${selectedSeatForAssignment.studentName}. You can assign it to someone else or make it empty.`
-                : `Choose a student for this seat in ${currentLibraryName}.`}
+                ? `This seat in ${currentLibraryName || 'the current library'} is taken by ${selectedSeatForAssignment.studentName}. You can assign it to someone else or make it empty.`
+                : `Choose a student for this seat in ${currentLibraryName || 'the current library'}.`}
             </DialogDescription>
           </DialogHeader>
           
@@ -381,9 +381,16 @@ export default function SeatsPage() {
       <Dialog open={isSeatFormOpen} onOpenChange={(open) => {if(!open) setEditingSeat(null); setIsSeatFormOpen(open);}}>
         <DialogContent>
             <DialogHeader>
-                <DialogTitle>{seatFormDialogMode === 'edit' ? "Edit Seat" : "Add New Seat"}</DialogTitle>
+                <DialogTitle>
+                    {seatFormDialogMode === 'edit' ? 
+                        (editingSeat ? `Edit Seat: ${editingSeat.seatNumber} (${editingSeat.floor})` : "Edit Seat") : 
+                        "Add New Seat"}
+                     {` to ${currentLibraryName || 'Current Library'}`}
+                </DialogTitle>
                 <DialogDescription>
-                    {seatFormDialogMode === 'edit' ? `Modify the details of this seat in ${currentLibraryName}.` : `Add a new seat to ${currentLibraryName}.`}
+                    {seatFormDialogMode === 'edit' ? 
+                        `Modify the details of this seat in ${currentLibraryName || 'the current library'}.` : 
+                        `Add a new seat to ${currentLibraryName || 'the current library'}.`}
                 </DialogDescription>
             </DialogHeader>
           <SeatForm 
@@ -404,7 +411,7 @@ export default function SeatsPage() {
                 <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                 <AlertDialogDescription>
                     This action cannot be undone. This will permanently delete seat 
-                    <span className="font-semibold"> {seatToDelete?.seatNumber} ({seatToDelete?.floor})</span> from {currentLibraryName}.
+                    <span className="font-semibold"> {seatToDelete?.seatNumber} ({seatToDelete?.floor})</span> from {currentLibraryName || 'the current library'}.
                     {seatToDelete?.isOccupied && " The assigned student will also be unassigned."}
                 </AlertDialogDescription>
                 </AlertDialogHeader>
@@ -421,6 +428,3 @@ export default function SeatsPage() {
     </div>
   );
 }
-
-
-    
