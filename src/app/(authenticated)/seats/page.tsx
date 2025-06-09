@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
@@ -53,7 +54,7 @@ export default function SeatsPage() {
   const [seatFormDialogMode, setSeatFormDialogMode] = useState<'add' | 'edit'>('add');
   
   const [seatToDelete, setSeatToDelete] = useState<Seat | null>(null);
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false); // Corrected line
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
@@ -375,3 +376,4 @@ export default function SeatsPage() {
     </div>
   );
 }
+
