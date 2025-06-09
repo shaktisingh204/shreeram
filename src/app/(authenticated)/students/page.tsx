@@ -7,16 +7,15 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { getStudents } from '@/lib/data';
-import type { Student } from '@/types';
-import { PlusCircle, Search, Edit, Eye, Trash2, Loader2 } from 'lucide-react';
+import { getStudents, getSeats } from '@/lib/data'; // Added getSeats
+import type { Student, Seat } from '@/types'; // Added Seat
+import { PlusCircle, Search, Edit, Eye, Trash2, Loader2, MoreHorizontal } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -27,6 +26,7 @@ import {
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
+  const [seats, setSeats] = useState<Seat[]>([]); // Added state for seats
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
@@ -34,8 +34,10 @@ export default function StudentsPage() {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const data = await getStudents();
-      setStudents(data);
+      const studentData = await getStudents();
+      const seatData = await getSeats(); // Fetch seats
+      setStudents(studentData);
+      setSeats(seatData); // Store seats
       setLoading(false);
     };
     fetchData();
@@ -52,7 +54,7 @@ export default function StudentsPage() {
   const getStatusBadgeVariant = (status: Student['status']) => {
     switch (status) {
       case 'enrolled':
-        return 'default'; // Will use primary color
+        return 'default'; 
       case 'owing':
         return 'destructive';
       case 'inactive':
@@ -60,6 +62,12 @@ export default function StudentsPage() {
       default:
         return 'outline';
     }
+  };
+
+  const getStudentSeatDisplay = (studentSeatId?: string) => {
+    if (!studentSeatId) return 'N/A';
+    const seat = seats.find(s => s.id === studentSeatId);
+    return seat ? `${seat.seatNumber} (${seat.floor})` : 'N/A';
   };
 
   if (loading) {
@@ -123,13 +131,13 @@ export default function StudentsPage() {
                 <TableRow key={student.id} className="hover:bg-muted/50 transition-colors">
                   <TableCell>
                     <Avatar className="h-10 w-10">
-                      <AvatarImage src={student.photoUrl || `https://placehold.co/40x40/663399/FFFFFF?text=${student.fullName.charAt(0)}`} alt={student.fullName} data-ai-hint="student avatar" />
+                      <AvatarImage src={student.photoUrl || `https://placehold.co/40x40/663399/FFFFFF?text=${student.fullName.charAt(0)}`} alt={student.fullName} data-ai-hint="student avatar"/>
                       <AvatarFallback>{student.fullName.slice(0,2).toUpperCase()}</AvatarFallback>
                     </Avatar>
                   </TableCell>
                   <TableCell className="font-medium">{student.fullName}</TableCell>
                   <TableCell>{student.contactDetails}</TableCell>
-                  <TableCell>{student.seatNumber || 'N/A'}</TableCell>
+                  <TableCell>{getStudentSeatDisplay(student.seatId)}</TableCell>
                   <TableCell>
                     <Badge variant={getStatusBadgeVariant(student.status)} className="capitalize">
                       {student.status}

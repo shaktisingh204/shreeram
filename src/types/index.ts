@@ -5,7 +5,7 @@ export interface Student {
   contactDetails: string;
   idProofUrl?: string;
   notes?: string;
-  seatNumber?: string;
+  seatId?: string; // Changed from seatNumber
   status: 'enrolled' | 'owing' | 'inactive';
   feesDue: number;
   lastPaymentDate?: string;
@@ -16,9 +16,10 @@ export interface Student {
 export interface Seat {
   id: string;
   seatNumber: string;
+  floor: string; // Added floor
   isOccupied: boolean;
   studentId?: string;
-  studentName?: string;
+  studentName?: string; // Kept for convenience, can be derived
 }
 
 export interface FeePayment {

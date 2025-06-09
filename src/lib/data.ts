@@ -1,25 +1,38 @@
 import type { Student, Seat, FeePlan, FeePayment, DashboardSummary } from '@/types';
 
-export const mockStudents: Student[] = [
-  { id: '1', fullName: 'Alice Wonderland', contactDetails: 'alice@example.com', seatNumber: 'A1', status: 'enrolled', feesDue: 0, enrollmentDate: '2023-01-15', feePlanId: 'fp1', photoUrl: 'https://placehold.co/100x100', idProofUrl: 'https://placehold.co/200x150' },
-  { id: '2', fullName: 'Bob The Builder', contactDetails: 'bob@example.com', seatNumber: 'B3', status: 'owing', feesDue: 50, enrollmentDate: '2023-02-01', feePlanId: 'fp2', lastPaymentDate: '2024-06-01' },
+// Initial mock students - seatId will be populated after seats are defined
+export const mockStudentsInitial: Omit<Student, 'id' | 'seatId'> & { tempSeatNumber?: string, id: string}[] = [
+  { id: '1', fullName: 'Alice Wonderland', contactDetails: 'alice@example.com', tempSeatNumber: 'F1-S1', status: 'enrolled', feesDue: 0, enrollmentDate: '2023-01-15', feePlanId: 'fp1', photoUrl: 'https://placehold.co/100x100', idProofUrl: 'https://placehold.co/200x150' },
+  { id: '2', fullName: 'Bob The Builder', contactDetails: 'bob@example.com', tempSeatNumber: 'F1-S2', status: 'owing', feesDue: 50, enrollmentDate: '2023-02-01', feePlanId: 'fp2', lastPaymentDate: '2024-06-01' },
   { id: '3', fullName: 'Charlie Brown', contactDetails: 'charlie@example.com', status: 'inactive', feesDue: 0, enrollmentDate: '2022-11-10' },
-  { id: '4', fullName: 'Diana Prince', contactDetails: 'diana@example.com', seatNumber: 'C2', status: 'enrolled', feesDue: 0, enrollmentDate: '2023-03-20', feePlanId: 'fp1' },
+  { id: '4', fullName: 'Diana Prince', contactDetails: 'diana@example.com', tempSeatNumber: 'F2-S1', status: 'enrolled', feesDue: 0, enrollmentDate: '2023-03-20', feePlanId: 'fp1' },
 ];
 
-export const mockSeats: Seat[] = Array.from({ length: 20 }, (_, i) => {
-  const row = String.fromCharCode(65 + Math.floor(i / 5)); // A, B, C, D
-  const col = (i % 5) + 1;
-  const seatNumber = `${row}${col}`;
-  const student = mockStudents.find(s => s.seatNumber === seatNumber);
+export const mockSeats: Seat[] = Array.from({ length: 12 }, (_, i) => { // Reduced initial seats, can be added via UI
+  const floorNumber = Math.floor(i / 6) + 1; // Example: 2 floors, 6 seats each
+  const seatInFloor = (i % 6) + 1;
+  const seatNumber = `S${seatInFloor}`; // Seat number within floor e.g., S1, S2
+  const studentAssigned = mockStudentsInitial.find(s => s.tempSeatNumber === `F${floorNumber}-${seatNumber}`);
   return {
-    id: `seat-${seatNumber}`,
-    seatNumber,
-    isOccupied: !!student,
-    studentId: student?.id,
-    studentName: student?.fullName,
+    id: `seat-f${floorNumber}-s${seatInFloor}`, // Globally unique seat ID
+    seatNumber, // Number like "S1", "S2"
+    floor: `Floor ${floorNumber}`, // Floor identifier
+    isOccupied: !!studentAssigned,
+    studentId: studentAssigned?.id,
+    studentName: studentAssigned?.fullName,
   };
 });
+
+// Populate student seatIds from mockSeats
+export const mockStudents: Student[] = mockStudentsInitial.map(sInit => {
+    const assignedSeat = mockSeats.find(seat => seat.studentId === sInit.id);
+    const { tempSeatNumber, ...studentData } = sInit;
+    return {
+        ...studentData,
+        seatId: assignedSeat?.id,
+    };
+});
+
 
 export const mockFeePlans: FeePlan[] = [
   { id: 'fp1', name: 'Standard Monthly', amount: 100, frequency: 'monthly' },
@@ -33,93 +46,177 @@ export const mockPayments: FeePayment[] = [
   { id: 'payment3', studentId: '4', studentName: 'Diana Prince', amount: 100, paymentDate: '2024-07-05', notes: 'July payment' },
 ];
 
-export const mockDashboardSummary: DashboardSummary = {
-  totalStudents: mockStudents.filter(s => s.status !== 'inactive').length,
-  totalSeats: mockSeats.length,
-  availableSeats: mockSeats.filter(s => !s.isOccupied).length,
-  monthlyIncome: mockPayments.reduce((sum, p) => {
-    const paymentMonth = new Date(p.paymentDate).getMonth();
-    const currentMonth = new Date().getMonth();
-    return paymentMonth === currentMonth ? sum + p.amount : sum;
-  }, 0),
-  feesDueToday: mockStudents.filter(s => s.status === 'owing' && s.feesDue > 0).length,
-};
 
-// Simulate database operations (in a real app, these would be API calls or server actions)
+// Simulate database operations
 export const getStudents = async (): Promise<Student[]> => {
-  await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
-  return mockStudents;
+  await new Promise(resolve => setTimeout(resolve, 500));
+  return mockStudents.map(s => ({...s})); // Return copies
 };
 
 export const getStudentById = async (id: string): Promise<Student | undefined> => {
   await new Promise(resolve => setTimeout(resolve, 300));
-  return mockStudents.find(s => s.id === id);
+  const student = mockStudents.find(s => s.id === id);
+  return student ? {...student} : undefined;
 };
 
-export const addStudent = async (student: Omit<Student, 'id'>): Promise<Student> => {
+export const addStudent = async (studentData: Omit<Student, 'id'>): Promise<Student> => {
   await new Promise(resolve => setTimeout(resolve, 500));
-  const newStudent: Student = { ...student, id: String(Date.now()) };
+  const newStudent: Student = { ...studentData, id: String(Date.now()) };
   mockStudents.push(newStudent);
-  // If seatNumber is provided, update the seat
-  if (newStudent.seatNumber) {
-    const seat = mockSeats.find(s => s.seatNumber === newStudent.seatNumber);
+  
+  if (newStudent.seatId) {
+    const seat = mockSeats.find(s => s.id === newStudent.seatId);
     if (seat) {
+      if (seat.isOccupied) throw new Error("Seat already occupied");
       seat.isOccupied = true;
       seat.studentId = newStudent.id;
       seat.studentName = newStudent.fullName;
+    } else {
+      // seatId provided but seat not found, invalidate assignment
+      newStudent.seatId = undefined; 
     }
   }
-  return newStudent;
+  return {...newStudent};
 };
 
-export const updateStudent = async (id: string, updates: Partial<Student>): Promise<Student | undefined> => {
+export const updateStudent = async (id: string, updates: Partial<Omit<Student, 'id'>>): Promise<Student | undefined> => {
   await new Promise(resolve => setTimeout(resolve, 500));
   const studentIndex = mockStudents.findIndex(s => s.id === id);
   if (studentIndex === -1) return undefined;
 
-  const originalStudent = mockStudents[studentIndex];
-  
-  // Handle seat change
-  if (updates.seatNumber !== undefined && updates.seatNumber !== originalStudent.seatNumber) {
+  const originalStudentData = { ...mockStudents[studentIndex] };
+
+  // Handle seat change if seatId is part of updates
+  if (updates.seatId !== undefined && updates.seatId !== originalStudentData.seatId) {
     // Vacate old seat
-    if (originalStudent.seatNumber) {
-      const oldSeat = mockSeats.find(s => s.seatNumber === originalStudent.seatNumber);
+    if (originalStudentData.seatId) {
+      const oldSeat = mockSeats.find(s => s.id === originalStudentData.seatId);
       if (oldSeat) {
         oldSeat.isOccupied = false;
         oldSeat.studentId = undefined;
         oldSeat.studentName = undefined;
       }
     }
-    // Occupy new seat
-    if (updates.seatNumber) {
-      const newSeat = mockSeats.find(s => s.seatNumber === updates.seatNumber);
+    // Occupy new seat (if updates.seatId is not null/empty string)
+    if (updates.seatId && updates.seatId !== "") {
+      const newSeat = mockSeats.find(s => s.id === updates.seatId);
       if (newSeat) {
+        if (newSeat.isOccupied && newSeat.studentId !== id) {
+            throw new Error(`Seat ${newSeat.seatNumber} on ${newSeat.floor} is already occupied.`);
+        }
         newSeat.isOccupied = true;
         newSeat.studentId = id;
-        newSeat.studentName = updates.fullName || originalStudent.fullName;
+        newSeat.studentName = updates.fullName || originalStudentData.fullName;
+      } else {
+        throw new Error(`Seat with ID ${updates.seatId} not found.`);
       }
     }
+  } else if (updates.seatId === "" && originalStudentData.seatId) { // Explicit unassignment via updateStudent (seatId set to empty string)
+     const oldSeat = mockSeats.find(s => s.id === originalStudentData.seatId);
+      if (oldSeat) {
+        oldSeat.isOccupied = false;
+        oldSeat.studentId = undefined;
+        oldSeat.studentName = undefined;
+      }
   }
 
-  mockStudents[studentIndex] = { ...originalStudent, ...updates };
-  return mockStudents[studentIndex];
+  mockStudents[studentIndex] = { ...mockStudents[studentIndex], ...updates };
+   if (updates.seatId === "") mockStudents[studentIndex].seatId = undefined; // ensure undefined if empty string was passed
+
+  return {...mockStudents[studentIndex]};
 };
 
 export const getSeats = async (): Promise<Seat[]> => {
   await new Promise(resolve => setTimeout(resolve, 200));
-  return mockSeats;
+  mockSeats.sort((a, b) => {
+    if (a.floor < b.floor) return -1;
+    if (a.floor > b.floor) return 1;
+    // Attempt to sort seat numbers numerically if possible, then alphabetically
+    const aNum = parseInt(a.seatNumber.replace(/[^0-9]/g, ''), 10);
+    const bNum = parseInt(b.seatNumber.replace(/[^0-9]/g, ''), 10);
+    const aPrefix = a.seatNumber.replace(/[0-9]/g, '');
+    const bPrefix = b.seatNumber.replace(/[0-9]/g, '');
+
+    if (aPrefix === bPrefix && !isNaN(aNum) && !isNaN(bNum)) {
+        return aNum - bNum;
+    }
+    return a.seatNumber.localeCompare(b.seatNumber);
+  });
+  return mockSeats.map(s => ({...s}));
 };
 
-export const assignSeat = async (studentId: string, seatNumber: string): Promise<boolean> => {
+export const getSeatById = async (id: string): Promise<Seat | undefined> => {
+  await new Promise(resolve => setTimeout(resolve, 100));
+  const seat = mockSeats.find(s => s.id === id);
+  return seat ? {...seat} : undefined;
+};
+
+export const addSeat = async (seatData: { seatNumber: string; floor: string }): Promise<Seat> => {
+  await new Promise(resolve => setTimeout(resolve, 300));
+  const existing = mockSeats.find(s => s.seatNumber === seatData.seatNumber && s.floor === seatData.floor);
+  if (existing) {
+    throw new Error(`Seat ${seatData.seatNumber} already exists on ${seatData.floor}.`);
+  }
+  const newSeat: Seat = {
+    id: `seat-${Date.now()}-${Math.random().toString(36).substring(2,7)}`,
+    seatNumber: seatData.seatNumber,
+    floor: seatData.floor,
+    isOccupied: false,
+  };
+  mockSeats.push(newSeat);
+  return {...newSeat};
+};
+
+export const updateSeatDetails = async (id: string, updates: { seatNumber?: string; floor?: string }): Promise<Seat | undefined> => {
+  await new Promise(resolve => setTimeout(resolve, 300));
+  const seatIndex = mockSeats.findIndex(s => s.id === id);
+  if (seatIndex === -1) return undefined;
+
+  const currentSeat = mockSeats[seatIndex];
+  const newSeatNumber = updates.seatNumber || currentSeat.seatNumber;
+  const newFloor = updates.floor || currentSeat.floor;
+
+  if (newSeatNumber !== currentSeat.seatNumber || newFloor !== currentSeat.floor) {
+    const existing = mockSeats.find(s => s.id !== id && s.seatNumber === newSeatNumber && s.floor === newFloor);
+    if (existing) {
+      throw new Error(`Another seat with number ${newSeatNumber} already exists on ${newFloor}.`);
+    }
+  }
+  
+  mockSeats[seatIndex] = { ...currentSeat, ...updates };
+  return {...mockSeats[seatIndex]};
+};
+
+export const deleteSeat = async (id: string): Promise<boolean> => {
+  await new Promise(resolve => setTimeout(resolve, 300));
+  const seatIndex = mockSeats.findIndex(s => s.id === id);
+  if (seatIndex === -1) return false;
+  
+  const seatToDelete = mockSeats[seatIndex];
+  if (seatToDelete.isOccupied && seatToDelete.studentId) {
+    const student = mockStudents.find(s => s.id === seatToDelete.studentId);
+    if (student) {
+      student.seatId = undefined;
+    }
+  }
+  mockSeats.splice(seatIndex, 1);
+  return true;
+};
+
+export const assignSeat = async (studentId: string, newSeatId: string): Promise<boolean> => {
   await new Promise(resolve => setTimeout(resolve, 300));
   const student = mockStudents.find(s => s.id === studentId);
-  const seat = mockSeats.find(s => s.seatNumber === seatNumber);
+  const newSeat = mockSeats.find(s => s.id === newSeatId);
 
-  if (!student || !seat || seat.isOccupied) return false;
+  if (!student || !newSeat) return false;
+  if (newSeat.isOccupied && newSeat.studentId !== studentId) { // Seat is occupied by someone else
+      throw new Error(`Seat ${newSeat.seatNumber} on ${newSeat.floor} is already assigned to ${newSeat.studentName}.`);
+  }
 
-  // Vacate previous seat if any
-  if (student.seatNumber) {
-    const oldSeat = mockSeats.find(s => s.seatNumber === student.seatNumber);
+
+  // Vacate student's current seat (if any and different from newSeat)
+  if (student.seatId && student.seatId !== newSeatId) {
+    const oldSeat = mockSeats.find(s => s.id === student.seatId);
     if (oldSeat) {
       oldSeat.isOccupied = false;
       oldSeat.studentId = undefined;
@@ -127,23 +224,47 @@ export const assignSeat = async (studentId: string, seatNumber: string): Promise
     }
   }
   
-  seat.isOccupied = true;
-  seat.studentId = studentId;
-  seat.studentName = student.fullName;
-  student.seatNumber = seatNumber;
+  // Assign new seat to student
+  newSeat.isOccupied = true;
+  newSeat.studentId = studentId;
+  newSeat.studentName = student.fullName;
+  student.seatId = newSeat.id;
   return true;
 };
 
+export const unassignSeat = async (seatId: string): Promise<boolean> => {
+  await new Promise(resolve => setTimeout(resolve, 300));
+  const seat = mockSeats.find(s => s.id === seatId);
+  if (!seat || !seat.isOccupied || !seat.studentId) return false;
+
+  const student = mockStudents.find(s => s.id === seat.studentId);
+  if (student) {
+    student.seatId = undefined;
+  }
+
+  seat.isOccupied = false;
+  seat.studentId = undefined;
+  seat.studentName = undefined;
+  return true;
+};
+
+
 export const getFeePlans = async (): Promise<FeePlan[]> => {
   await new Promise(resolve => setTimeout(resolve, 200));
-  return mockFeePlans;
+  return mockFeePlans.map(fp => ({...fp}));
 }
+
+export const getFeePlanById = async (id: string): Promise<FeePlan | undefined> => {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const plan = mockFeePlans.find(p => p.id === id);
+    return plan ? {...plan} : undefined;
+};
 
 export const addFeePlan = async (plan: Omit<FeePlan, 'id'>): Promise<FeePlan> => {
   await new Promise(resolve => setTimeout(resolve, 300));
   const newPlan : FeePlan = {...plan, id: String(Date.now())};
   mockFeePlans.push(newPlan);
-  return newPlan;
+  return {...newPlan};
 }
 
 export const updateFeePlan = async (id: string, updates: Partial<FeePlan>): Promise<FeePlan | undefined> => {
@@ -151,12 +272,12 @@ export const updateFeePlan = async (id: string, updates: Partial<FeePlan>): Prom
   const planIndex = mockFeePlans.findIndex(p => p.id === id);
   if (planIndex === -1) return undefined;
   mockFeePlans[planIndex] = {...mockFeePlans[planIndex], ...updates};
-  return mockFeePlans[planIndex];
+  return {...mockFeePlans[planIndex]};
 }
 
 export const getPayments = async (): Promise<FeePayment[]> => {
   await new Promise(resolve => setTimeout(resolve, 200));
-  return mockPayments;
+  return mockPayments.map(p => ({...p}));
 }
 
 export const addPayment = async (payment: Omit<FeePayment, 'id' | 'studentName'>): Promise<FeePayment> => {
@@ -168,11 +289,11 @@ export const addPayment = async (payment: Omit<FeePayment, 'id' | 'studentName'>
   mockPayments.push(newPayment);
   
   student.feesDue = Math.max(0, student.feesDue - payment.amount);
-  if (student.feesDue === 0) {
+  if (student.feesDue === 0 && student.status === 'owing') {
     student.status = 'enrolled';
   }
   student.lastPaymentDate = newPayment.paymentDate;
-  return newPayment;
+  return {...newPayment};
 }
 
 export const markFeesAsPaid = async (studentId: string): Promise<boolean> => {
@@ -180,7 +301,9 @@ export const markFeesAsPaid = async (studentId: string): Promise<boolean> => {
   const student = mockStudents.find(s => s.id === studentId);
   if (!student) return false;
   student.feesDue = 0;
-  student.status = 'enrolled';
+  if (student.status === 'owing') {
+    student.status = 'enrolled';
+  }
   student.lastPaymentDate = new Date().toISOString().split('T')[0]; // Today's date
   return true;
 }
@@ -188,7 +311,6 @@ export const markFeesAsPaid = async (studentId: string): Promise<boolean> => {
 
 export const getDashboardSummary = async (): Promise<DashboardSummary> => {
   await new Promise(resolve => setTimeout(resolve, 100));
-  // Recalculate summary based on current mock data state
   return {
     totalStudents: mockStudents.filter(s => s.status !== 'inactive').length,
     totalSeats: mockSeats.length,
@@ -196,12 +318,11 @@ export const getDashboardSummary = async (): Promise<DashboardSummary> => {
     monthlyIncome: mockPayments.reduce((sum, p) => {
       const paymentDate = new Date(p.paymentDate);
       const currentDate = new Date();
-      // Check if payment is in the current month and year
       if (paymentDate.getFullYear() === currentDate.getFullYear() && paymentDate.getMonth() === currentDate.getMonth()) {
         return sum + p.amount;
       }
       return sum;
     }, 0),
-    feesDueToday: mockStudents.filter(s => s.status === 'owing' && s.feesDue > 0).length, // Simplified, real logic might be complex
+    feesDueToday: mockStudents.filter(s => s.status === 'owing' && s.feesDue > 0).length,
   };
 }

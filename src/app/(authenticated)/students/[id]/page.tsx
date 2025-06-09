@@ -1,25 +1,17 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { getStudentById, getPayments, getFeePlanById } from '@/lib/data'; // Assuming getFeePlanById
-import type { Student, FeePayment, FeePlan } from '@/types';
+import { getStudentById, getPayments, getFeePlanById, getSeatById } from '@/lib/data'; 
+import type { Student, FeePayment, FeePlan, Seat } from '@/types';
 import { useParams, useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Edit, DollarSign, Loader2, User, Mail, StickyNote, Armchair, CalendarDays, FileText, Briefcase } from 'lucide-react';
+import { ArrowLeft, Edit, DollarSign, Loader2, User, Mail, StickyNote, Armchair, CalendarDays, Briefcase } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-
-// Helper to get FeePlan (mocked)
-async function getFeePlanByIdMock(id?: string): Promise<FeePlan | undefined> {
-  if (!id) return undefined;
-  const plans = await import('@/lib/data').then(mod => mod.mockFeePlans);
-  return plans.find(p => p.id === id);
-}
-
 
 export default function StudentDetailPage() {
   const params = useParams();
@@ -27,6 +19,7 @@ export default function StudentDetailPage() {
   const studentId = params.id as string;
 
   const [student, setStudent] = useState<Student | null>(null);
+  const [assignedSeat, setAssignedSeat] = useState<Seat | null>(null);
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [feePlan, setFeePlan] = useState<FeePlan | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,22 +31,28 @@ export default function StudentDetailPage() {
         try {
           const studentData = await getStudentById(studentId);
           if (!studentData) {
-            router.push('/students'); // Student not found
+            router.push('/students'); 
             return;
           }
           setStudent(studentData);
 
-          const paymentData = await getPayments(); // In real app, filter by studentId
+          if (studentData.seatId) {
+            const seatData = await getSeatById(studentData.seatId);
+            setAssignedSeat(seatData || null);
+          } else {
+            setAssignedSeat(null);
+          }
+
+          const paymentData = await getPayments(); 
           setPayments(paymentData.filter(p => p.studentId === studentId));
 
           if (studentData.feePlanId) {
-            const planData = await getFeePlanByIdMock(studentData.feePlanId);
+            const planData = await getFeePlanById(studentData.feePlanId);
             if (planData) setFeePlan(planData);
           }
 
         } catch (error) {
           console.error("Error fetching student details:", error);
-          // Handle error (e.g., show toast)
         } finally {
           setLoading(false);
         }
@@ -115,7 +114,7 @@ export default function StudentDetailPage() {
             <h3 className="text-lg font-semibold text-foreground border-b pb-2 mb-2">Personal Information</h3>
             <InfoItem icon={Mail} label="Contact Email" value={student.contactDetails} />
             <InfoItem icon={CalendarDays} label="Enrollment Date" value={new Date(student.enrollmentDate).toLocaleDateString()} />
-            {student.seatNumber && <InfoItem icon={Armchair} label="Assigned Seat" value={student.seatNumber} />}
+            {assignedSeat && <InfoItem icon={Armchair} label="Assigned Seat" value={`${assignedSeat.seatNumber} (Floor: ${assignedSeat.floor})`} />}
             {student.notes && <InfoItem icon={StickyNote} label="Notes" value={student.notes} />}
           </div>
           <div className="space-y-4">
@@ -187,4 +186,3 @@ function InfoItem({ icon: Icon, label, value, className }: InfoItemProps) {
     </div>
   );
 }
-

@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getSeats, getFeePlans } from "@/lib/data"; // Assuming you have these functions in lib/data
+import { getSeats, getFeePlans } from "@/lib/data";
 
 const studentFormSchema = z.object({
   fullName: z.string().min(2, { message: "Full name must be at least 2 characters." }).max(100),
@@ -30,11 +30,11 @@ const studentFormSchema = z.object({
   photoUrl: z.string().url({ message: "Invalid URL for photo." }).optional().or(z.literal('')),
   idProofUrl: z.string().url({ message: "Invalid URL for ID proof." }).optional().or(z.literal('')),
   notes: z.string().max(500).optional(),
-  seatNumber: z.string().optional(),
+  seatId: z.string().optional().or(z.literal('')), // Changed from seatNumber to seatId
   status: z.enum(["enrolled", "owing", "inactive"]),
   feesDue: z.coerce.number().min(0, { message: "Fees due cannot be negative." }),
   enrollmentDate: z.string().refine((date) => !isNaN(Date.parse(date)), { message: "Invalid date format." }),
-  feePlanId: z.string().optional(),
+  feePlanId: z.string().optional().or(z.literal('')),
 });
 
 export type StudentFormValues = z.infer<typeof studentFormSchema>;
@@ -53,10 +53,10 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
 
   useEffect(() => {
     async function fetchData() {
-      const seats = await getSeats();
-      // Filter for available seats + the student's current seat if editing
-      const currentSeat = initialData?.seatNumber;
-      setAvailableSeats(seats.filter(seat => !seat.isOccupied || seat.seatNumber === currentSeat));
+      const seatsData = await getSeats();
+      // Filter for available seats OR the student's current seat if editing
+      const currentSeatId = initialData?.seatId;
+      setAvailableSeats(seatsData.filter(seat => !seat.isOccupied || seat.id === currentSeatId));
       
       const plans = await getFeePlans();
       setFeePlans(plans);
@@ -70,13 +70,15 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
       ...initialData,
       feesDue: initialData.feesDue || 0,
       enrollmentDate: initialData.enrollmentDate || new Date().toISOString().split('T')[0],
+      seatId: initialData.seatId || "", // Ensure seatId is correctly mapped
+      feePlanId: initialData.feePlanId || "",
     } : {
       fullName: "",
       contactDetails: "",
       photoUrl: "",
       idProofUrl: "",
       notes: "",
-      seatNumber: "",
+      seatId: "", // Default to empty string for no seat
       status: "enrolled",
       feesDue: 0,
       enrollmentDate: new Date().toISOString().split('T')[0],
@@ -86,11 +88,17 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
 
   const handleFormSubmit = async (values: StudentFormValues) => {
     try {
-      await onSubmit(values);
+      // Ensure empty string seatId is converted to undefined if your backend expects that for "no seat"
+      const submissionValues = {
+        ...values,
+        seatId: values.seatId === "" ? undefined : values.seatId,
+        feePlanId: values.feePlanId === "" ? undefined : values.feePlanId,
+      };
+      await onSubmit(submissionValues as StudentFormValues); // Cast if necessary after modification
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to save student data. Please try again.",
+        description: (error as Error).message || "Failed to save student data. Please try again.",
         variant: "destructive",
       });
     }
@@ -140,7 +148,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                 <FormItem>
                   <FormLabel>Photo URL (Optional)</FormLabel>
                   <FormControl>
-                    <Input placeholder="https://example.com/photo.jpg" {...field} />
+                    <Input placeholder="https://example.com/photo.jpg" {...field} value={field.value ?? ""} />
                   </FormControl>
                    <FormDescription>Link to student's photo. Use https://placehold.co for placeholders.</FormDescription>
                   <FormMessage />
@@ -154,7 +162,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                 <FormItem>
                   <FormLabel>ID Proof URL (Optional)</FormLabel>
                   <FormControl>
-                    <Input placeholder="https://example.com/id.pdf" {...field} />
+                    <Input placeholder="https://example.com/id.pdf" {...field} value={field.value ?? ""} />
                   </FormControl>
                    <FormDescription>Link to student's ID proof. Use https://placehold.co for placeholders.</FormDescription>
                   <FormMessage />
@@ -178,11 +186,11 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField
                 control={form.control}
-                name="seatNumber"
+                name="seatId"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Assign Seat (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a seat" />
@@ -191,8 +199,8 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                       <SelectContent>
                         <SelectItem value="">No Seat</SelectItem>
                         {availableSeats.map(seat => (
-                          <SelectItem key={seat.id} value={seat.seatNumber}>
-                            {seat.seatNumber}
+                          <SelectItem key={seat.id} value={seat.id}>
+                            {seat.seatNumber} ({seat.floor})
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -244,7 +252,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Fee Plan (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a fee plan" />
@@ -271,7 +279,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                 <FormItem>
                   <FormLabel>Notes (Optional)</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Any additional notes about the student..." {...field} />
+                    <Textarea placeholder="Any additional notes about the student..." {...field} value={field.value ?? ""} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
