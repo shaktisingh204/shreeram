@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
@@ -5,6 +6,7 @@ import { getStudents, getPayments, addPayment, markFeesAsPaid as markFeesAsPaidA
 import type { Student, FeePayment, FeePlan } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -360,3 +362,6 @@ export default function FeesPage() {
     </div>
   );
 }
+
+
+      
