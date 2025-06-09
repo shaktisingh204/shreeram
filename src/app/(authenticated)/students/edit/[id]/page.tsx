@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { Button } from '@/components/ui/button';
 
 interface EditStudentPageProps {
   params: { id: string };
@@ -47,6 +48,9 @@ export default function EditStudentPage({ params }: EditStudentPageProps) {
         }
       };
       fetchStudent();
+    } else if (!authLoading && !currentLibraryId) {
+      // If auth is done but no library ID, no point in trying to load student
+      setLoadingData(false);
     }
   }, [studentId, currentLibraryId, authLoading, toast, router]);
 
@@ -86,7 +90,7 @@ export default function EditStudentPage({ params }: EditStudentPageProps) {
   
   if (!currentLibraryId) {
     return (
-      <div className="flex flex-col justify-center items-center h-full text-center">
+      <div className="flex flex-col justify-center items-center h-full text-center p-4">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
         <p className="text-xl font-semibold">Cannot Edit Student</p>
         <p className="text-muted-foreground">A library context is required.</p>
@@ -96,12 +100,18 @@ export default function EditStudentPage({ params }: EditStudentPageProps) {
   }
 
   if (!student) {
-    return <div className="text-center py-12">Student not found. Or you may not have access in the current library context.</div>;
+    return <div className="text-center py-12 p-4">Student not found. Or you may not have access in the current library context.</div>;
   }
 
   return (
     <div className="space-y-6">
-      <StudentForm initialData={student} onSubmit={handleSubmit} isSubmitting={isSubmitting} />
+      <StudentForm 
+        initialData={student} 
+        onSubmit={handleSubmit} 
+        isSubmitting={isSubmitting}
+        currentLibraryId={currentLibraryId}
+      />
     </div>
   );
 }
+

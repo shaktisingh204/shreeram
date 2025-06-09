@@ -63,6 +63,7 @@ export interface UserMetadata {
   role: 'superadmin' | 'manager';
   displayName?: string;
   mobileNumber?: string;
-  assignedLibraryId?: string; // Only for managers
-  assignedLibraryName?: string; // For display
+  assignedLibraryId?: string; 
+  assignedLibraryName?: string; 
 }
+

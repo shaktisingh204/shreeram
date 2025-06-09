@@ -75,13 +75,15 @@ interface StudentFormProps {
   initialData?: Student;
   onSubmit: (values: StudentSubmitValues) => Promise<void>;
   isSubmitting: boolean;
+  currentLibraryId: string | null; // Added prop
 }
 
-export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentFormProps) {
+export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibraryId }: StudentFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [availableSeats, setAvailableSeats] = useState<Seat[]>([]);
   const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]);
+  const [loadingDropdownData, setLoadingDropdownData] = useState(true);
   
   const [photoPreview, setPhotoPreview] = useState<string | null>(initialData?.photoUrl || null);
   const [idProofFileName, setIdProofFileName] = useState<string | null>(initialData?.idProofUrl ? "Existing ID Proof" : null);
@@ -89,15 +91,28 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
 
   useEffect(() => {
     async function fetchData() {
-      const seatsData = await getSeats();
-      const currentSeatId = initialData?.seatId;
-      setAvailableSeats(seatsData.filter(seat => !seat.isOccupied || seat.id === currentSeatId));
-      
-      const plans = await getPaymentTypes();
-      setPaymentTypes(plans);
+      if (!currentLibraryId) {
+        setLoadingDropdownData(false);
+        toast({ title: "Error", description: "Library context not available for fetching form data.", variant: "destructive"});
+        return;
+      }
+      setLoadingDropdownData(true);
+      try {
+        const seatsData = await getSeats(currentLibraryId);
+        const currentSeatId = initialData?.seatId;
+        setAvailableSeats(seatsData.filter(seat => !seat.isOccupied || seat.id === currentSeatId));
+        
+        const plans = await getPaymentTypes(currentLibraryId);
+        setPaymentTypes(plans);
+      } catch (error) {
+        console.error("Error fetching seats/payment types for student form:", error);
+        toast({ title: "Form Error", description: "Could not load seat or payment type options.", variant: "destructive"});
+      } finally {
+        setLoadingDropdownData(false);
+      }
     }
     fetchData();
-  }, [initialData]);
+  }, [initialData, currentLibraryId, toast]);
 
   const form = useForm<StudentFormValues>({
     resolver: zodResolver(studentFormSchema),
@@ -162,6 +177,10 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
 
 
   const handleFormSubmit = async (values: StudentFormValues) => {
+    if (!currentLibraryId) {
+      toast({ title: "Error", description: "Cannot submit form without library context.", variant: "destructive" });
+      return;
+    }
     try {
       const { photoUpload, idProofUpload, photoUrl: initialPhotoUrl, idProofUrl: initialIdProofUrl, ...restOfFormValues } = values;
       
@@ -331,10 +350,10 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Choose Seat (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={loadingDropdownData}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Choose a seat" />
+                          <SelectValue placeholder={loadingDropdownData ? "Loading seats..." : "Choose a seat"} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -393,10 +412,10 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Payment Type (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={loadingDropdownData}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Choose a payment type" />
+                          <SelectValue placeholder={loadingDropdownData ? "Loading types..." : "Choose a payment type"} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -431,7 +450,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
             <Button type="button" variant="outline" onClick={() => router.back()}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" disabled={isSubmitting || loadingDropdownData || !currentLibraryId}>
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {initialData ? "Save Changes" : "Add Student"}
             </Button>
@@ -441,3 +460,4 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
     </Card>
   );
 }
+

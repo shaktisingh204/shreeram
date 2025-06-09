@@ -8,6 +8,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Loader2, AlertTriangle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
 
 export default function AddStudentPage() {
   const { currentLibraryId, loading: authLoading } = useAuth();
@@ -51,7 +53,7 @@ export default function AddStudentPage() {
 
   if (!currentLibraryId) {
     return (
-      <div className="flex flex-col justify-center items-center h-full text-center">
+      <div className="flex flex-col justify-center items-center h-full text-center p-4">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
         <p className="text-xl font-semibold">Cannot Add Student</p>
         <p className="text-muted-foreground">A library context is required to add a new student.</p>
@@ -62,7 +64,12 @@ export default function AddStudentPage() {
 
   return (
     <div className="space-y-6">
-      <StudentForm onSubmit={handleSubmit} isSubmitting={isSubmitting} />
+      <StudentForm 
+        onSubmit={handleSubmit} 
+        isSubmitting={isSubmitting} 
+        currentLibraryId={currentLibraryId}
+      />
     </div>
   );
 }
+
