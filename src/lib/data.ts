@@ -12,10 +12,11 @@ const snapshotToAray = (snapshot: any) => {
   return items;
 };
 
+const ACTIVE_LIBRARY_ID = "library_main"; // This will be used to namespace data
 
 // Student Operations
 export const getStudents = async (): Promise<Student[]> => {
-  const studentsRef = ref(db, 'students');
+  const studentsRef = ref(db, `libraries/${ACTIVE_LIBRARY_ID}/students`);
   const snapshot = await get(studentsRef);
   if (snapshot.exists()) {
     return snapshotToAray(snapshot);
@@ -24,7 +25,7 @@ export const getStudents = async (): Promise<Student[]> => {
 };
 
 export const getStudentById = async (id: string): Promise<Student | undefined> => {
-  const studentRef = ref(db, `students/${id}`);
+  const studentRef = ref(db, `libraries/${ACTIVE_LIBRARY_ID}/students/${id}`);
   const snapshot = await get(studentRef);
   if (snapshot.exists()) {
     return { id: snapshot.key, ...snapshot.val() } as Student;
@@ -65,7 +66,7 @@ export const addStudent = async (studentData: StudentDataInput): Promise<Student
   
   const { photo, idProof, ...restStudentData } = studentData;
   
-  const newStudentRef = push(ref(db, 'students'));
+  const newStudentRef = push(ref(db, `libraries/${ACTIVE_LIBRARY_ID}/students`));
   const studentId = newStudentRef.key;
   if (!studentId) throw new Error("Failed to generate student ID.");
 
@@ -73,7 +74,6 @@ export const addStudent = async (studentData: StudentDataInput): Promise<Student
     ...restStudentData,
     photoUrl: finalPhotoUrl,
     idProofUrl: finalIdProofUrl,
-    // Ensure all new fields are included, defaulting to null/undefined if not provided
     mobileNumber: studentData.mobileNumber || undefined,
     fatherName: studentData.fatherName || undefined,
     address: studentData.address || undefined,
@@ -86,21 +86,21 @@ export const addStudent = async (studentData: StudentDataInput): Promise<Student
 
 
   const updates: Record<string, any> = {};
-  updates[`/students/${studentId}`] = studentToSave;
+  updates[`libraries/${ACTIVE_LIBRARY_ID}/students/${studentId}`] = studentToSave;
 
   if (studentToSave.seatId) {
-    const seatSnapshot = await get(ref(db, `seats/${studentToSave.seatId}`));
+    const seatSnapshot = await get(ref(db, `libraries/${ACTIVE_LIBRARY_ID}/seats/${studentToSave.seatId}`));
     if (seatSnapshot.exists()) {
         const seatVal = seatSnapshot.val();
         if (seatVal.isOccupied) {
             throw new Error(`Seat ${seatVal.seatNumber} (${seatVal.floor}) is already taken.`);
         }
-        updates[`/seats/${studentToSave.seatId}/isOccupied`] = true;
-        updates[`/seats/${studentToSave.seatId}/studentId`] = studentId;
-        updates[`/seats/${studentToSave.seatId}/studentName`] = studentToSave.fullName;
+        updates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${studentToSave.seatId}/isOccupied`] = true;
+        updates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${studentToSave.seatId}/studentId`] = studentId;
+        updates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${studentToSave.seatId}/studentName`] = studentToSave.fullName;
     } else {
         studentToSave.seatId = undefined; 
-        updates[`/students/${studentId}/seatId`] = null; 
+        updates[`libraries/${ACTIVE_LIBRARY_ID}/students/${studentId}/seatId`] = null; 
     }
   }
   await update(ref(db), updates);
@@ -108,7 +108,7 @@ export const addStudent = async (studentData: StudentDataInput): Promise<Student
 };
 
 export const updateStudent = async (id: string, updates: Partial<StudentDataInput>): Promise<Student | undefined> => {
-  const studentRef = ref(db, `students/${id}`);
+  const studentRef = ref(db, `libraries/${ACTIVE_LIBRARY_ID}/students/${id}`);
   const studentSnapshot = await get(studentRef);
   if (!studentSnapshot.exists()) return undefined;
 
@@ -130,7 +130,6 @@ export const updateStudent = async (id: string, updates: Partial<StudentDataInpu
 
   const { photo, idProof, ...restUpdates } = updates;
   
-  // Ensure new fields are part of the update, handling undefined or empty strings from form
   const updatedStudentData = { 
     ...originalStudentData, 
     ...restUpdates,
@@ -142,36 +141,36 @@ export const updateStudent = async (id: string, updates: Partial<StudentDataInpu
   };
 
   const dbUpdates: Record<string, any> = {};
-  dbUpdates[`/students/${id}`] = updatedStudentData;
+  dbUpdates[`libraries/${ACTIVE_LIBRARY_ID}/students/${id}`] = updatedStudentData;
 
   const newSeatId = updatedStudentData.seatId === 'NONE_SELECT_VALUE' ? undefined : updatedStudentData.seatId;
   const oldSeatId = originalStudentData.seatId;
 
   if (newSeatId !== oldSeatId) {
     if (oldSeatId) {
-      dbUpdates[`/seats/${oldSeatId}/isOccupied`] = false;
-      dbUpdates[`/seats/${oldSeatId}/studentId`] = null;
-      dbUpdates[`/seats/${oldSeatId}/studentName`] = null;
+      dbUpdates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${oldSeatId}/isOccupied`] = false;
+      dbUpdates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${oldSeatId}/studentId`] = null;
+      dbUpdates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${oldSeatId}/studentName`] = null;
     }
     if (newSeatId) {
-      const newSeatSnapshot = await get(ref(db, `seats/${newSeatId}`));
+      const newSeatSnapshot = await get(ref(db, `libraries/${ACTIVE_LIBRARY_ID}/seats/${newSeatId}`));
       if (newSeatSnapshot.exists()) {
         const newSeatVal = newSeatSnapshot.val();
         if (newSeatVal.isOccupied && newSeatVal.studentId !== id) {
           throw new Error(`Seat ${newSeatVal.seatNumber} (${newSeatVal.floor}) is already taken by ${newSeatVal.studentName}.`);
         }
-        dbUpdates[`/seats/${newSeatId}/isOccupied`] = true;
-        dbUpdates[`/seats/${newSeatId}/studentId`] = id;
-        dbUpdates[`/seats/${newSeatId}/studentName`] = updatedStudentData.fullName;
-        dbUpdates[`/students/${id}/seatId`] = newSeatId;
+        dbUpdates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${newSeatId}/isOccupied`] = true;
+        dbUpdates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${newSeatId}/studentId`] = id;
+        dbUpdates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${newSeatId}/studentName`] = updatedStudentData.fullName;
+        dbUpdates[`libraries/${ACTIVE_LIBRARY_ID}/students/${id}/seatId`] = newSeatId;
       } else {
-         dbUpdates[`/students/${id}/seatId`] = null; 
+         dbUpdates[`libraries/${ACTIVE_LIBRARY_ID}/students/${id}/seatId`] = null; 
       }
     } else {
-        dbUpdates[`/students/${id}/seatId`] = null; 
+        dbUpdates[`libraries/${ACTIVE_LIBRARY_ID}/students/${id}/seatId`] = null; 
     }
   } else if (updates.fullName && originalStudentData.seatId) {
-    dbUpdates[`/seats/${originalStudentData.seatId}/studentName`] = updatedStudentData.fullName;
+    dbUpdates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${originalStudentData.seatId}/studentName`] = updatedStudentData.fullName;
   }
   
   await update(ref(db), dbUpdates);
@@ -181,7 +180,7 @@ export const updateStudent = async (id: string, updates: Partial<StudentDataInpu
 
 // Seat Operations
 export const getSeats = async (): Promise<Seat[]> => {
-  const seatsRef = ref(db, 'seats');
+  const seatsRef = ref(db, `libraries/${ACTIVE_LIBRARY_ID}/seats`);
   const snapshot = await get(seatsRef);
   if (snapshot.exists()) {
     const seatsArray = snapshotToAray(snapshot);
@@ -204,7 +203,7 @@ export const getSeats = async (): Promise<Seat[]> => {
 };
 
 export const getSeatById = async (id: string): Promise<Seat | undefined> => {
-  const seatRef = ref(db, `seats/${id}`);
+  const seatRef = ref(db, `libraries/${ACTIVE_LIBRARY_ID}/seats/${id}`);
   const snapshot = await get(seatRef);
   if (snapshot.exists()) {
     return { id: snapshot.key, ...snapshot.val() } as Seat;
@@ -213,7 +212,7 @@ export const getSeatById = async (id: string): Promise<Seat | undefined> => {
 };
 
 export const addSeat = async (seatData: { seatNumber: string; floor: string }): Promise<Seat> => {
-  const seatsQuery = query(ref(db, 'seats'), orderByChild('floor'), equalTo(seatData.floor));
+  const seatsQuery = query(ref(db, `libraries/${ACTIVE_LIBRARY_ID}/seats`), orderByChild('floor'), equalTo(seatData.floor));
   const snapshot = await get(seatsQuery);
   if (snapshot.exists()) {
     let seatExists = false;
@@ -227,7 +226,7 @@ export const addSeat = async (seatData: { seatNumber: string; floor: string }): 
     }
   }
 
-  const newSeatRef = push(ref(db, 'seats'));
+  const newSeatRef = push(ref(db, `libraries/${ACTIVE_LIBRARY_ID}/seats`));
   const newSeatId = newSeatRef.key;
   if (!newSeatId) throw new Error("Failed to generate seat ID.");
 
@@ -242,7 +241,7 @@ export const addSeat = async (seatData: { seatNumber: string; floor: string }): 
 };
 
 export const updateSeatDetails = async (id: string, updates: { seatNumber?: string; floor?: string }): Promise<Seat | undefined> => {
-  const seatRef = ref(db, `seats/${id}`);
+  const seatRef = ref(db, `libraries/${ACTIVE_LIBRARY_ID}/seats/${id}`);
   const seatSnapshot = await get(seatRef);
   if (!seatSnapshot.exists()) return undefined;
 
@@ -251,7 +250,7 @@ export const updateSeatDetails = async (id: string, updates: { seatNumber?: stri
   const newFloor = updates.floor || currentSeat.floor;
 
   if (newSeatNumber !== currentSeat.seatNumber || newFloor !== currentSeat.floor) {
-    const seatsQuery = query(ref(db, 'seats'), orderByChild('floor'), equalTo(newFloor));
+    const seatsQuery = query(ref(db, `libraries/${ACTIVE_LIBRARY_ID}/seats`), orderByChild('floor'), equalTo(newFloor));
     const snapshot = await get(seatsQuery);
     if (snapshot.exists()) {
         let seatExists = false;
@@ -272,24 +271,24 @@ export const updateSeatDetails = async (id: string, updates: { seatNumber?: stri
 };
 
 export const deleteSeat = async (id: string): Promise<boolean> => {
-  const seatRef = ref(db, `seats/${id}`);
+  const seatRef = ref(db, `libraries/${ACTIVE_LIBRARY_ID}/seats/${id}`);
   const seatSnapshot = await get(seatRef);
   if (!seatSnapshot.exists()) return false;
   
   const seatToDelete = seatSnapshot.val() as Seat;
   const updates: Record<string, any> = {};
-  updates[`/seats/${id}`] = null; 
+  updates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${id}`] = null; 
 
   if (seatToDelete.isOccupied && seatToDelete.studentId) {
-    updates[`/students/${seatToDelete.studentId}/seatId`] = null; 
+    updates[`libraries/${ACTIVE_LIBRARY_ID}/students/${seatToDelete.studentId}/seatId`] = null; 
   }
   await update(ref(db), updates);
   return true;
 };
 
 export const assignSeat = async (studentId: string, newSeatId: string): Promise<boolean> => {
-  const studentRef = ref(db, `students/${studentId}`);
-  const newSeatRef = ref(db, `seats/${newSeatId}`);
+  const studentRef = ref(db, `libraries/${ACTIVE_LIBRARY_ID}/students/${studentId}`);
+  const newSeatRef = ref(db, `libraries/${ACTIVE_LIBRARY_ID}/seats/${newSeatId}`);
 
   const studentSnap = await get(studentRef);
   const newSeatSnap = await get(newSeatRef);
@@ -305,22 +304,22 @@ export const assignSeat = async (studentId: string, newSeatId: string): Promise<
 
   const updates: Record<string, any> = {};
   if (student.seatId && student.seatId !== newSeatId) { 
-    updates[`/seats/${student.seatId}/isOccupied`] = false;
-    updates[`/seats/${student.seatId}/studentId`] = null;
-    updates[`/seats/${student.seatId}/studentName`] = null;
+    updates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${student.seatId}/isOccupied`] = false;
+    updates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${student.seatId}/studentId`] = null;
+    updates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${student.seatId}/studentName`] = null;
   }
   
-  updates[`/seats/${newSeatId}/isOccupied`] = true;
-  updates[`/seats/${newSeatId}/studentId`] = studentId;
-  updates[`/seats/${newSeatId}/studentName`] = student.fullName;
-  updates[`/students/${studentId}/seatId`] = newSeatId;
+  updates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${newSeatId}/isOccupied`] = true;
+  updates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${newSeatId}/studentId`] = studentId;
+  updates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${newSeatId}/studentName`] = student.fullName;
+  updates[`libraries/${ACTIVE_LIBRARY_ID}/students/${studentId}/seatId`] = newSeatId;
   
   await update(ref(db), updates);
   return true;
 };
 
 export const unassignSeat = async (seatId: string): Promise<boolean> => {
-  const seatRef = ref(db, `seats/${seatId}`);
+  const seatRef = ref(db, `libraries/${ACTIVE_LIBRARY_ID}/seats/${seatId}`);
   const seatSnapshot = await get(seatRef);
   if (!seatSnapshot.exists()) return false;
 
@@ -328,10 +327,10 @@ export const unassignSeat = async (seatId: string): Promise<boolean> => {
   if (!seat.isOccupied || !seat.studentId) return false; 
 
   const updates: Record<string, any> = {};
-  updates[`/seats/${seatId}/isOccupied`] = false;
-  updates[`/seats/${seatId}/studentId`] = null;
-  updates[`/seats/${seatId}/studentName`] = null;
-  updates[`/students/${seat.studentId}/seatId`] = null;
+  updates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${seatId}/isOccupied`] = false;
+  updates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${seatId}/studentId`] = null;
+  updates[`libraries/${ACTIVE_LIBRARY_ID}/seats/${seatId}/studentName`] = null;
+  updates[`libraries/${ACTIVE_LIBRARY_ID}/students/${seat.studentId}/seatId`] = null;
 
   await update(ref(db), updates);
   return true;
@@ -339,7 +338,7 @@ export const unassignSeat = async (seatId: string): Promise<boolean> => {
 
 // Payment Type Operations
 export const getPaymentTypes = async (): Promise<PaymentType[]> => {
-  const paymentTypesRef = ref(db, 'paymentTypes');
+  const paymentTypesRef = ref(db, `libraries/${ACTIVE_LIBRARY_ID}/paymentTypes`);
   const snapshot = await get(paymentTypesRef);
   if (snapshot.exists()) {
     return snapshotToAray(snapshot);
@@ -348,7 +347,7 @@ export const getPaymentTypes = async (): Promise<PaymentType[]> => {
 }
 
 export const getPaymentTypeById = async (id: string): Promise<PaymentType | undefined> => {
-    const ptRef = ref(db, `paymentTypes/${id}`);
+    const ptRef = ref(db, `libraries/${ACTIVE_LIBRARY_ID}/paymentTypes/${id}`);
     const snapshot = await get(ptRef);
     if (snapshot.exists()) {
         return { id: snapshot.key, ...snapshot.val() } as PaymentType;
@@ -357,7 +356,7 @@ export const getPaymentTypeById = async (id: string): Promise<PaymentType | unde
 };
 
 export const addPaymentType = async (planData: Omit<PaymentType, 'id'>): Promise<PaymentType> => {
-  const newPaymentTypeRef = push(ref(db, 'paymentTypes'));
+  const newPaymentTypeRef = push(ref(db, `libraries/${ACTIVE_LIBRARY_ID}/paymentTypes`));
   const newId = newPaymentTypeRef.key;
   if (!newId) throw new Error("Failed to generate payment type ID.");
   const newPlan : PaymentType = {...planData, id: newId};
@@ -366,7 +365,7 @@ export const addPaymentType = async (planData: Omit<PaymentType, 'id'>): Promise
 }
 
 export const updatePaymentType = async (id: string, updates: Partial<PaymentType>): Promise<PaymentType | undefined> => {
-  const ptRef = ref(db, `paymentTypes/${id}`);
+  const ptRef = ref(db, `libraries/${ACTIVE_LIBRARY_ID}/paymentTypes/${id}`);
   const snapshot = await get(ptRef);
   if (!snapshot.exists()) return undefined;
   const updatedData = { ...snapshot.val(), ...updates, id: id };
@@ -376,7 +375,7 @@ export const updatePaymentType = async (id: string, updates: Partial<PaymentType
 
 // Fee Payment Operations
 export const getPayments = async (): Promise<FeePayment[]> => {
-  const paymentsRef = ref(db, 'payments');
+  const paymentsRef = ref(db, `libraries/${ACTIVE_LIBRARY_ID}/payments`);
   const snapshot = await get(paymentsRef);
   if (snapshot.exists()) {
     return snapshotToAray(snapshot);
@@ -385,26 +384,26 @@ export const getPayments = async (): Promise<FeePayment[]> => {
 }
 
 export const addPayment = async (paymentData: Omit<FeePayment, 'id' | 'studentName'>): Promise<FeePayment> => {
-  const studentRef = ref(db, `students/${paymentData.studentId}`);
+  const studentRef = ref(db, `libraries/${ACTIVE_LIBRARY_ID}/students/${paymentData.studentId}`);
   const studentSnapshot = await get(studentRef);
   if (!studentSnapshot.exists()) throw new Error("Student not found");
   
   const student = {id: studentSnapshot.key, ...studentSnapshot.val()} as Student;
 
-  const newPaymentRef = push(ref(db, 'payments'));
+  const newPaymentRef = push(ref(db, `libraries/${ACTIVE_LIBRARY_ID}/payments`));
   const newPaymentId = newPaymentRef.key;
   if (!newPaymentId) throw new Error("Failed to generate payment ID.");
 
   const newPayment: FeePayment = { ...paymentData, id: newPaymentId, studentName: student.fullName };
   
   const updates: Record<string, any> = {};
-  updates[`/payments/${newPaymentId}`] = newPayment;
+  updates[`libraries/${ACTIVE_LIBRARY_ID}/payments/${newPaymentId}`] = newPayment;
   
   const newFeesDue = Math.max(0, student.feesDue - paymentData.amount);
-  updates[`/students/${student.id}/feesDue`] = newFeesDue;
-  updates[`/students/${student.id}/lastPaymentDate`] = paymentData.paymentDate;
+  updates[`libraries/${ACTIVE_LIBRARY_ID}/students/${student.id}/feesDue`] = newFeesDue;
+  updates[`libraries/${ACTIVE_LIBRARY_ID}/students/${student.id}/lastPaymentDate`] = paymentData.paymentDate;
   if (newFeesDue === 0 && student.status === 'owing') {
-    updates[`/students/${student.id}/status`] = 'enrolled';
+    updates[`libraries/${ACTIVE_LIBRARY_ID}/students/${student.id}/status`] = 'enrolled';
   }
   
   await update(ref(db), updates);
@@ -412,16 +411,16 @@ export const addPayment = async (paymentData: Omit<FeePayment, 'id' | 'studentNa
 }
 
 export const markFeesAsPaid = async (studentId: string): Promise<boolean> => {
-  const studentRef = ref(db, `students/${studentId}`);
+  const studentRef = ref(db, `libraries/${ACTIVE_LIBRARY_ID}/students/${studentId}`);
   const studentSnapshot = await get(studentRef);
   if (!studentSnapshot.exists()) return false;
 
   const student = {id: studentSnapshot.key, ...studentSnapshot.val()} as Student;
   const updates: Record<string, any> = {};
-  updates[`/students/${studentId}/feesDue`] = 0;
-  updates[`/students/${studentId}/lastPaymentDate`] = new Date().toISOString().split('T')[0];
+  updates[`libraries/${ACTIVE_LIBRARY_ID}/students/${studentId}/feesDue`] = 0;
+  updates[`libraries/${ACTIVE_LIBRARY_ID}/students/${studentId}/lastPaymentDate`] = new Date().toISOString().split('T')[0];
   if (student.status === 'owing') {
-    updates[`/students/${studentId}/status`] = 'enrolled';
+    updates[`libraries/${ACTIVE_LIBRARY_ID}/students/${studentId}/status`] = 'enrolled';
   }
   
   await update(ref(db), updates);
@@ -430,9 +429,9 @@ export const markFeesAsPaid = async (studentId: string): Promise<boolean> => {
 
 // Dashboard Summary
 export const getDashboardSummary = async (): Promise<DashboardSummary> => {
-  const students = await getStudents();
-  const seats = await getSeats();
-  const payments = await getPayments();
+  const students = await getStudents(); // Will fetch from ACTIVE_LIBRARY_ID/students
+  const seats = await getSeats(); // Will fetch from ACTIVE_LIBRARY_ID/seats
+  const payments = await getPayments(); // Will fetch from ACTIVE_LIBRARY_ID/payments
 
   const activeStudents = students.filter(s => s.status !== 'inactive');
   const totalIncomeThisMonth = payments.reduce((sum, p) => {
