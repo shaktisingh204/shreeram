@@ -104,7 +104,7 @@ export default function StudentsPage() {
               <SelectItem value="inactive">Inactive</SelectItem>
             </SelectContent>
           </Select>
-          <Link href="/students/add" legacyBehavior passHref>
+          <Link href="/students/add">
             <Button className="w-full sm:w-auto">
               <PlusCircle className="mr-2 h-4 w-4" /> Add Student
             </Button>
@@ -182,7 +182,7 @@ export default function StudentsPage() {
             {searchTerm || statusFilter !== 'all' ? "Try adjusting your search or filter criteria." : "Get started by adding a new student."}
           </p>
           {!(searchTerm || statusFilter !== 'all') && (
-             <Link href="/students/add" legacyBehavior passHref>
+             <Link href="/students/add">
                 <Button className="mt-4">
                   <PlusCircle className="mr-2 h-4 w-4" /> Add Student
                 </Button>
