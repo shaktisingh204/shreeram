@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -54,7 +55,7 @@ export function AppSidebar() {
         <SidebarMenu>
           {navItems.map((item) => (
             <SidebarMenuItem key={item.href}>
-              <Link href={item.href} legacyBehavior passHref>
+              <Link href={item.href}>
                 <SidebarMenuButton
                   isActive={pathname.startsWith(item.href)}
                   tooltip={item.label}
@@ -70,7 +71,7 @@ export function AppSidebar() {
       <SidebarFooter className="p-2 border-t border-sidebar-border">
         <SidebarMenu>
           <SidebarMenuItem>
-             <Link href="/settings" legacyBehavior passHref>
+             <Link href="/settings">
                 <SidebarMenuButton tooltip="Settings">
                     <Settings />
                     <span>Settings</span>
