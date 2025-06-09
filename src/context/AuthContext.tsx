@@ -11,8 +11,8 @@ import {
   onAuthStateChanged, 
   type User 
 } from 'firebase/auth';
-import { getUserMetadata, getLibraryById } from '@/lib/data';
-import type { UserMetadata } from '@/types';
+import { getUserMetadata, getLibraryById, getLibrariesMetadata } from '@/lib/data'; // Added getLibrariesMetadata
+import type { UserMetadata, LibraryMetadata } from '@/types';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -25,6 +25,9 @@ interface AuthContextType {
   currentLibraryName: string | null;
   isSuperAdmin: boolean;
   isManager: boolean;
+  allLibraries: LibraryMetadata[]; // Added to store all libraries for superadmin
+  switchLibraryContext: (newLibraryId: string) => Promise<void>; // For superadmin to switch context
+  refreshUserAndLibraries: () => Promise<void>; // To refresh data
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -37,6 +40,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [userMetadata, setUserMetadata] = useState<UserMetadata | null>(null);
   const [currentLibraryId, setCurrentLibraryId] = useState<string | null>(null);
   const [currentLibraryName, setCurrentLibraryName] = useState<string | null>(null);
+  const [allLibraries, setAllLibraries] = useState<LibraryMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
@@ -53,63 +57,91 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setCurrentLibraryName(null);
     }
   }, []);
+  
+  const _isSuperAdmin = (metadata: UserMetadata | null) => metadata?.role === 'superadmin';
+  const _isManager = (metadata: UserMetadata | null) => metadata?.role === 'manager';
 
-  useEffect(() => {
-    console.log('[AuthContext] useEffect: Running onAuthStateChanged setup.');
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      console.log('[AuthContext] onAuthStateChanged: Fired. currentUser:', currentUser ? currentUser.uid : 'null');
-      setLoading(true); 
-      setUser(currentUser);
-      if (currentUser) {
-        console.log(`[AuthContext] User authenticated: ${currentUser.uid}, Email: ${currentUser.email}`);
-        try {
-          const metadata = await getUserMetadata(currentUser.uid);
-          console.log('[AuthContext] Fetched user metadata:', metadata);
-          setUserMetadata(metadata);
+  const refreshUserAndLibraries = useCallback(async (firebaseUser?: User | null) => {
+    const currentUserToProcess = firebaseUser === undefined ? user : firebaseUser;
+    console.log('[AuthContext] refreshUserAndLibraries: Called. Current user to process:', currentUserToProcess?.uid);
+    if (currentUserToProcess) {
+      try {
+        const metadata = await getUserMetadata(currentUserToProcess.uid);
+        console.log('[AuthContext] refreshUserAndLibraries: Fetched user metadata:', metadata);
+        setUserMetadata(metadata);
 
-          if (metadata?.role === 'manager' && metadata.assignedLibraryId) {
-            console.log(`[AuthContext] User is Manager. Assigned Library ID: ${metadata.assignedLibraryId}`);
-            setCurrentLibraryId(metadata.assignedLibraryId);
-            await fetchAndSetLibraryName(metadata.assignedLibraryId);
-          } else if (metadata?.role === 'superadmin') {
-            const superAdminLibId = metadata.assignedLibraryId || DEFAULT_SUPERADMIN_LIBRARY_ID;
-            console.log(`[AuthContext] User is Superadmin. Effective Library ID for initial context: ${superAdminLibId} (metadata.assignedLibraryId: ${metadata.assignedLibraryId}, fallback: ${DEFAULT_SUPERADMIN_LIBRARY_ID})`);
-            setCurrentLibraryId(superAdminLibId);
-            await fetchAndSetLibraryName(superAdminLibId);
-          } else {
-            console.warn('[AuthContext] User authenticated but not a manager/superadmin or missing library assignment. Metadata:', metadata);
-            setCurrentLibraryId(null);
-            setCurrentLibraryName(null);
+        let newCurrentLibraryId = null;
+        if (_isManager(metadata) && metadata.assignedLibraryId) {
+          console.log(`[AuthContext] refreshUserAndLibraries: User is Manager. Assigned Library ID: ${metadata.assignedLibraryId}`);
+          newCurrentLibraryId = metadata.assignedLibraryId;
+        } else if (_isSuperAdmin(metadata)) {
+          // For superadmin, try to keep current selection, or default
+          const superAdminInitialLibId = currentLibraryId || metadata.assignedLibraryId || DEFAULT_SUPERADMIN_LIBRARY_ID;
+          console.log(`[AuthContext] refreshUserAndLibraries: User is Superadmin. Effective Library ID for context: ${superAdminInitialLibId}`);
+          newCurrentLibraryId = superAdminInitialLibId;
+          
+          // Fetch all libraries for superadmin
+          const libs = await getLibrariesMetadata();
+          console.log('[AuthContext] refreshUserAndLibraries: Fetched all libraries for superadmin:', libs.length);
+          setAllLibraries(libs);
+
+          // Ensure the newCurrentLibraryId is valid among all fetched libraries for superadmin
+          if (libs.length > 0 && !libs.find(lib => lib.id === newCurrentLibraryId)) {
+            console.warn(`[AuthContext] refreshUserAndLibraries: Superadmin's current/default library ID ${newCurrentLibraryId} not found in all libraries. Falling back to first available.`);
+            newCurrentLibraryId = libs[0].id;
+          } else if (libs.length === 0) {
+             console.warn(`[AuthContext] refreshUserAndLibraries: No libraries found for superadmin. Setting context to null.`);
+             newCurrentLibraryId = null; // No libraries to select
           }
-        } catch (error) {
-          console.error("[AuthContext] Error fetching user metadata or setting library context:", error);
-          setUserMetadata(null);
-          setCurrentLibraryId(null);
-          setCurrentLibraryName(null);
+
+        } else {
+          console.warn('[AuthContext] refreshUserAndLibraries: User not manager/superadmin or missing library assignment. Metadata:', metadata);
         }
-      } else {
-        console.log('[AuthContext] No user authenticated.');
+        
+        setCurrentLibraryId(newCurrentLibraryId);
+        await fetchAndSetLibraryName(newCurrentLibraryId);
+
+      } catch (error) {
+        console.error("[AuthContext] refreshUserAndLibraries: Error fetching user metadata or library context:", error);
         setUserMetadata(null);
         setCurrentLibraryId(null);
         setCurrentLibraryName(null);
+        setAllLibraries([]);
       }
-      console.log('[AuthContext] Setting loading to false.');
+    } else {
+      console.log('[AuthContext] refreshUserAndLibraries: No user authenticated.');
+      setUserMetadata(null);
+      setCurrentLibraryId(null);
+      setCurrentLibraryName(null);
+      setAllLibraries([]);
+    }
+  }, [user, fetchAndSetLibraryName, currentLibraryId]); // Added currentLibraryId to dependencies for superadmin logic
+
+
+  useEffect(() => {
+    console.log('[AuthContext] useEffect: Running onAuthStateChanged setup.');
+    const unsubscribe = onAuthStateChanged(auth, async (currentUserAuth) => {
+      console.log('[AuthContext] onAuthStateChanged: Fired. currentUserAuth:', currentUserAuth ? currentUserAuth.uid : 'null');
+      setLoading(true); 
+      setUser(currentUserAuth);
+      await refreshUserAndLibraries(currentUserAuth); // Pass the fresh currentUserAuth
+      console.log('[AuthContext] Setting loading to false after refresh.');
       setLoading(false);
     });
     return () => {
       console.log('[AuthContext] useEffect: Unsubscribing from onAuthStateChanged.');
       unsubscribe();
     };
-  }, [fetchAndSetLibraryName]);
+  }, [refreshUserAndLibraries]); // refreshUserAndLibraries is memoized
 
   const isAuthenticated = !!user;
-  const isSuperAdmin = userMetadata?.role === 'superadmin';
-  const isManager = userMetadata?.role === 'manager';
+  const isSuperAdmin = _isSuperAdmin(userMetadata);
+  const isManager = _isManager(userMetadata);
 
 
   useEffect(() => {
     if (!loading) {
-      console.log(`[AuthContext] Auth state determined. isAuthenticated: ${isAuthenticated}, pathname: ${pathname}, loading: ${loading}`);
+      console.log(`[AuthContext] Auth state determined. isAuthenticated: ${isAuthenticated}, pathname: ${pathname}, loading: ${loading}, currentLibraryId: ${currentLibraryId}`);
       if (!isAuthenticated && pathname !== '/login') {
         console.log('[AuthContext] Not authenticated and not on login page, redirecting to /login.');
         router.push('/login');
@@ -120,7 +152,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } else {
       console.log('[AuthContext] Auth state still loading...');
     }
-  }, [isAuthenticated, loading, pathname, router]);
+  }, [isAuthenticated, loading, pathname, router, currentLibraryId]);
 
   const login = async (email: string, password_input: string): Promise<boolean> => {
     console.log(`[AuthContext] login: Attempting login for email: ${email}`);
@@ -128,7 +160,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       await signInWithEmailAndPassword(auth, email, password_input);
       console.log(`[AuthContext] login: Firebase signInWithEmailAndPassword successful for ${email}. onAuthStateChanged will handle next steps.`);
-      // onAuthStateChanged will handle setting user, metadata and navigating
+      // onAuthStateChanged's call to refreshUserAndLibraries will handle setting user, metadata and navigating
       // setLoading(false) is handled by onAuthStateChanged's effect after processing
       return true;
     } catch (error) {
@@ -144,16 +176,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       await signOut(auth);
       console.log('[AuthContext] logout: Firebase signOut successful.');
-      setUser(null); // Explicitly clear state, though onAuthStateChanged will also fire
-      setUserMetadata(null);
-      setCurrentLibraryId(null);
-      setCurrentLibraryName(null);
-      router.push('/login');
+      // setUser(null); // onAuthStateChanged will handle this
+      // setUserMetadata(null);
+      // setCurrentLibraryId(null);
+      // setCurrentLibraryName(null);
+      // setAllLibraries([]);
+      router.push('/login'); // onAuthStateChanged will then clear state and set loading=false
     } catch (error) {
       console.error("[AuthContext] logout: Error signing out:", error);
-    } finally {
-        // setLoading(false); // onAuthStateChanged will set loading to false after it processes the null user
-        // Let's rely on onAuthStateChanged to set loading to false to maintain consistency
+      setLoading(false); // Set loading false in case of sign out error
+    }
+  };
+  
+  const switchLibraryContext = async (newLibraryId: string) => {
+    if (isSuperAdmin) {
+      console.log(`[AuthContext] switchLibraryContext: Superadmin switching to library ID: ${newLibraryId}`);
+      const libraryExists = allLibraries.some(lib => lib.id === newLibraryId);
+      if (libraryExists) {
+        setCurrentLibraryId(newLibraryId);
+        await fetchAndSetLibraryName(newLibraryId);
+      } else {
+        console.warn(`[AuthContext] switchLibraryContext: Attempted to switch to non-existent library ID: ${newLibraryId}. No change made.`);
+      }
+    } else {
+      console.warn("[AuthContext] switchLibraryContext: Only superadmins can switch library context.");
     }
   };
 
@@ -168,7 +214,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         currentLibraryId,
         currentLibraryName,
         isSuperAdmin,
-        isManager
+        isManager,
+        allLibraries,
+        switchLibraryContext,
+        refreshUserAndLibraries // Expose the refresh function
     }}>
       {children}
     </AuthContext.Provider>

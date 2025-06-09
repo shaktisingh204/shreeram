@@ -9,12 +9,14 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Library, CalendarDays } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useAuth } from '@/context/AuthContext'; // Import useAuth
 
 export default function ManageLibrariesPage() {
   const [libraries, setLibraries] = useState<LibraryMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const { refreshUserAndLibraries } = useAuth(); // Get the refresh function
 
   const fetchData = async () => {
     setLoading(true);
@@ -37,7 +39,8 @@ export default function ManageLibrariesPage() {
     try {
       await addLibraryMetadata(values.name);
       toast({ title: "Success", description: `Library "${values.name}" added.` });
-      await fetchData(); // Refresh the list
+      await fetchData(); // Refresh the local list for this page
+      await refreshUserAndLibraries(); // Refresh the global library list in AuthContext
     } catch (error) {
       toast({ title: "Error", description: (error as Error).message || "Failed to add library.", variant: "destructive" });
     } finally {
