@@ -1,3 +1,4 @@
+
 import type { Student, Seat, FeePlan, FeePayment, DashboardSummary } from '@/types';
 
 // Initial mock students - seatId will be populated after seats are defined
@@ -85,46 +86,52 @@ export const updateStudent = async (id: string, updates: Partial<Omit<Student, '
   if (studentIndex === -1) return undefined;
 
   const originalStudentData = { ...mockStudents[studentIndex] };
+  
+  // Determine the new seatId; if seatId is not in updates, it means no change to seat assignment was intended through this update.
+  // updates.seatId will be a string ID if a seat is chosen, or undefined if "No Seat" was chosen in the form.
+  const newSeatId = updates.hasOwnProperty('seatId') ? updates.seatId : originalStudentData.seatId;
+  const oldSeatId = originalStudentData.seatId;
 
-  // Handle seat change if seatId is part of updates
-  if (updates.seatId !== undefined && updates.seatId !== originalStudentData.seatId) {
-    // Vacate old seat
-    if (originalStudentData.seatId) {
-      const oldSeat = mockSeats.find(s => s.id === originalStudentData.seatId);
+  if (newSeatId !== oldSeatId) {
+    // Vacate old seat if there was one
+    if (oldSeatId) {
+      const oldSeat = mockSeats.find(s => s.id === oldSeatId);
       if (oldSeat) {
         oldSeat.isOccupied = false;
         oldSeat.studentId = undefined;
         oldSeat.studentName = undefined;
       }
     }
-    // Occupy new seat (if updates.seatId is not null/empty string)
-    if (updates.seatId && updates.seatId !== "") {
-      const newSeat = mockSeats.find(s => s.id === updates.seatId);
-      if (newSeat) {
-        if (newSeat.isOccupied && newSeat.studentId !== id) {
-            throw new Error(`Seat ${newSeat.seatNumber} on ${newSeat.floor} is already occupied.`);
+    // Occupy new seat if newSeatId is a valid ID (i.e., not undefined)
+    if (newSeatId) {
+      const newSeat = mockSeats.find(s => s.id === newSeatId);
+      if (!newSeat) {
+        // This case should ideally be prevented by form validation if newSeatId is from user input.
+        // If it still happens, it indicates a data inconsistency or a non-existent seatId was provided.
+        // Revert student's seatId to oldSeatId or handle as an error. For now, log and prevent assignment.
+        console.error(`Seat with ID ${newSeatId} not found during student update. Student ${id} will not be assigned to this seat.`);
+        // Ensure the student's seatId in `updates` reflects this problem, or remove it to keep old seat.
+        // For simplicity, we'll proceed with other updates but the student's seatId won't change to the new, invalid one.
+        if (updates.hasOwnProperty('seatId')) {
+             updates.seatId = oldSeatId; // Or undefined if the intent was to unassign from a non-existent new seat
         }
+      } else if (newSeat.isOccupied && newSeat.studentId !== id) {
+        throw new Error(`Seat ${newSeat.seatNumber} on ${newSeat.floor} is already occupied by ${newSeat.studentName}.`);
+      } else {
         newSeat.isOccupied = true;
         newSeat.studentId = id;
-        newSeat.studentName = updates.fullName || originalStudentData.fullName;
-      } else {
-        throw new Error(`Seat with ID ${updates.seatId} not found.`);
+        newSeat.studentName = updates.fullName || originalStudentData.fullName; // Use updated name if provided
       }
     }
-  } else if (updates.seatId === "" && originalStudentData.seatId) { // Explicit unassignment via updateStudent (seatId set to empty string)
-     const oldSeat = mockSeats.find(s => s.id === originalStudentData.seatId);
-      if (oldSeat) {
-        oldSeat.isOccupied = false;
-        oldSeat.studentId = undefined;
-        oldSeat.studentName = undefined;
-      }
   }
 
-  mockStudents[studentIndex] = { ...mockStudents[studentIndex], ...updates };
-   if (updates.seatId === "") mockStudents[studentIndex].seatId = undefined; // ensure undefined if empty string was passed
+  // Apply all updates to the student record.
+  // The `updates` object will have `seatId` as either a valid ID or `undefined`.
+  mockStudents[studentIndex] = { ...originalStudentData, ...updates };
 
-  return {...mockStudents[studentIndex]};
+  return { ...mockStudents[studentIndex] };
 };
+
 
 export const getSeats = async (): Promise<Seat[]> => {
   await new Promise(resolve => setTimeout(resolve, 200));
@@ -184,6 +191,13 @@ export const updateSeatDetails = async (id: string, updates: { seatNumber?: stri
   }
   
   mockSeats[seatIndex] = { ...currentSeat, ...updates };
+  // If seat details change, and it's occupied, update studentName on seat (if student exists)
+  if (mockSeats[seatIndex].isOccupied && mockSeats[seatIndex].studentId) {
+      const student = mockStudents.find(s => s.id === mockSeats[seatIndex].studentId);
+      if (student) {
+          mockSeats[seatIndex].studentName = student.fullName;
+      }
+  }
   return {...mockSeats[seatIndex]};
 };
 
@@ -326,3 +340,4 @@ export const getDashboardSummary = async (): Promise<DashboardSummary> => {
     feesDueToday: mockStudents.filter(s => s.status === 'owing' && s.feesDue > 0).length,
   };
 }
+
