@@ -12,7 +12,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-  FormDescription,
+  // FormDescription, // No longer used directly in CardHeader
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -104,7 +104,7 @@ export function UserForm({ initialData, onSubmit, isSubmitting, onCancel, mode }
             <CardTitle className="font-headline text-xl text-primary">
             {mode === 'edit' ? "Edit Manager Details" : "Add New Manager"}
             </CardTitle>
-            {mode === 'add' && <FormDescription>Create a new manager account and assign them to a library.</FormDescription>}
+            {mode === 'add' && <p className="text-sm text-muted-foreground pt-1">Create a new manager account and assign them to a library.</p>}
         </CardHeader>
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)}>
