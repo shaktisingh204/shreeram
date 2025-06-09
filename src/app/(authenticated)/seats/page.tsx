@@ -92,7 +92,7 @@ export default function SeatsPage() {
 
   useEffect(() => {
     fetchAllData();
-  }, [currentLibraryId, authLoading, toast, currentLibraryName]); // Added currentLibraryName and toast
+  }, [currentLibraryId, authLoading]); // Simplified dependencies
 
   const seatsByFloor = useMemo(() => {
     return allSeats.reduce((acc, seat) => {
@@ -428,3 +428,6 @@ export default function SeatsPage() {
     </div>
   );
 }
+
+
+    
