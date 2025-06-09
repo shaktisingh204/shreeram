@@ -7,7 +7,7 @@ import { getStudentById, updateStudent } from '@/lib/data';
 import type { Student } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, Library } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 
@@ -16,7 +16,7 @@ interface EditStudentPageProps {
 }
 
 export default function EditStudentPage({ params }: EditStudentPageProps) {
-  const { currentLibraryId, loading: authLoading } = useAuth();
+  const { currentLibraryId, currentLibraryName, loading: authLoading } = useAuth();
   const [student, setStudent] = useState<Student | null>(null);
   const [loadingData, setLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,7 +35,7 @@ export default function EditStudentPage({ params }: EditStudentPageProps) {
             } else {
             toast({
                 title: "Error",
-                description: "Student not found in the current library context.",
+                description: `Student not found in ${currentLibraryName || 'the current library'}.`,
                 variant: "destructive",
             });
             router.push('/students');
@@ -49,10 +49,9 @@ export default function EditStudentPage({ params }: EditStudentPageProps) {
       };
       fetchStudent();
     } else if (!authLoading && !currentLibraryId) {
-      // If auth is done but no library ID, no point in trying to load student
       setLoadingData(false);
     }
-  }, [studentId, currentLibraryId, authLoading, toast, router]);
+  }, [studentId, currentLibraryId, authLoading, toast, router, currentLibraryName]);
 
   const handleSubmit = async (values: StudentSubmitValues) => {
     if (!currentLibraryId) {
@@ -64,7 +63,7 @@ export default function EditStudentPage({ params }: EditStudentPageProps) {
       await updateStudent(currentLibraryId, studentId as string, values);
       toast({
         title: "Success",
-        description: "Student details saved.",
+        description: `Student details saved in ${currentLibraryName || 'the library'}.`,
       });
       router.push('/students');
       router.refresh(); 
@@ -72,7 +71,7 @@ export default function EditStudentPage({ params }: EditStudentPageProps) {
        console.error("Failed to update student:", error);
       toast({
         title: "Error",
-        description: (error as Error).message || "Could not save student details. Please try again.",
+        description: (error as Error).message || `Could not save student details in ${currentLibraryName || 'the library'}. Please try again.`,
         variant: "destructive",
       });
     } finally {
@@ -93,18 +92,24 @@ export default function EditStudentPage({ params }: EditStudentPageProps) {
       <div className="flex flex-col justify-center items-center h-full text-center p-4">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
         <p className="text-xl font-semibold">Cannot Edit Student</p>
-        <p className="text-muted-foreground">A library context is required.</p>
+        <p className="text-muted-foreground">A library context is required. Please select a library.</p>
          <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
       </div>
     );
   }
 
   if (!student) {
-    return <div className="text-center py-12 p-4">Student not found. Or you may not have access in the current library context.</div>;
+    return <div className="text-center py-12 p-4">Student not found or not accessible in {currentLibraryName || 'the current library'}.</div>;
   }
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center space-x-2">
+        <Library className="h-6 w-6 text-accent" />
+        <p className="text-lg text-muted-foreground">
+          Editing student in: <span className="font-semibold text-primary">{currentLibraryName || "Selected Library"}</span>
+        </p>
+      </div>
       <StudentForm 
         initialData={student} 
         onSubmit={handleSubmit} 
@@ -114,4 +119,3 @@ export default function EditStudentPage({ params }: EditStudentPageProps) {
     </div>
   );
 }
-

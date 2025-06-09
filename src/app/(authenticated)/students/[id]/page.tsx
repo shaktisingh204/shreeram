@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Edit, DollarSign, Loader2, User, Mail, StickyNote, Armchair, CalendarDays, Briefcase, Phone, Home, UserCircle2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Edit, DollarSign, Loader2, User, Mail, StickyNote, Armchair, CalendarDays, Briefcase, Phone, Home, UserCircle2, AlertTriangle, Library } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
@@ -19,7 +19,7 @@ export default function StudentDetailPage() {
   const params = useParams();
   const router = useRouter();
   const studentId = params.id as string;
-  const { currentLibraryId, loading: authLoading } = useAuth();
+  const { currentLibraryId, currentLibraryName, loading: authLoading } = useAuth();
 
   const [student, setStudent] = useState<Student | null>(null);
   const [assignedSeat, setAssignedSeat] = useState<Seat | null>(null);
@@ -34,7 +34,7 @@ export default function StudentDetailPage() {
         try {
           const studentData = await getStudentById(currentLibraryId, studentId);
           if (!studentData) {
-            toast({ title: "Not Found", description: "Student not found in this library.", variant: "destructive" });
+            toast({ title: "Not Found", description: `Student not found in ${currentLibraryName || 'this library'}.`, variant: "destructive" });
             router.push('/students'); 
             return;
           }
@@ -57,14 +57,14 @@ export default function StudentDetailPage() {
 
         } catch (error) {
           console.error("Error fetching student details:", error);
-          // Potentially show toast error
+          toast({ title: "Error", description: `Could not fetch student details for ${currentLibraryName || 'this library'}.`, variant: "destructive" });
         } finally {
           setLoadingData(false);
         }
       };
       fetchData();
     }
-  }, [studentId, currentLibraryId, authLoading, router]);
+  }, [studentId, currentLibraryId, authLoading, router, currentLibraryName]);
   
   const getStatusBadgeVariant = (status: Student['status'] | undefined) => {
     if (!status) return 'outline';
@@ -76,8 +76,7 @@ export default function StudentDetailPage() {
     }
   };
   
-  // Temporary toast for missing import
-  const toast = (opts: any) => console.log("Toast:", opts.title, opts.description);
+  const toast = (opts: any) => console.log("Toast:", opts.title, opts.description); // Placeholder
 
 
   if (authLoading || loadingData) {
@@ -93,7 +92,7 @@ export default function StudentDetailPage() {
       <div className="flex flex-col justify-center items-center h-full text-center">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
         <p className="text-xl font-semibold">No Library Selected</p>
-        <p className="text-muted-foreground">A library context is required to view student details.</p>
+        <p className="text-muted-foreground">A library context is required to view student details. Please select a library.</p>
          <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
       </div>
     );
@@ -101,7 +100,7 @@ export default function StudentDetailPage() {
 
 
   if (!student) {
-    return <div className="text-center py-12">Student not found in the current library.</div>;
+    return <div className="text-center py-12">Student not found in {currentLibraryName || 'the current library'}.</div>;
   }
 
   return (
@@ -120,13 +119,18 @@ export default function StudentDetailPage() {
       <Card className="shadow-xl">
         <CardHeader className="flex flex-col md:flex-row items-start md:items-center gap-4 p-6 bg-muted/30 rounded-t-lg">
           <Avatar className="h-24 w-24 border-4 border-primary">
-            <AvatarImage src={student.photoUrl || `https://placehold.co/100x100/663399/FFFFFF?text=${student.fullName.charAt(0)}`} alt={student.fullName} data-ai-hint="student photo" />
+            <AvatarImage src={student.photoUrl || `https://placehold.co/100x100/663399/FFFFFF?text=${student.fullName.charAt(0)}`} alt={student.fullName} data-ai-hint="student photo"/>
             <AvatarFallback className="text-3xl">{student.fullName.slice(0,2).toUpperCase()}</AvatarFallback>
           </Avatar>
           <div className="flex-1">
             <CardTitle className="text-3xl font-headline text-primary">{student.fullName}</CardTitle>
-            {student.fatherName && <p className="text-sm text-muted-foreground">S/o {student.fatherName}</p>}
-            <Badge variant={getStatusBadgeVariant(student.status)} className="capitalize mt-1 text-sm">
+            <div className="flex items-center text-sm text-muted-foreground">
+              <Library className="h-4 w-4 mr-1.5 text-accent" />
+              <span>{currentLibraryName || 'Selected Library'}</span>
+              {student.fatherName && <span className="mx-1.5">|</span>}
+              {student.fatherName && <span>S/o {student.fatherName}</span>}
+            </div>
+            <Badge variant={getStatusBadgeVariant(student.status)} className="capitalize mt-2 text-sm">
               {student.status === 'owing' ? 'Has Dues' : student.status}
             </Badge>
           </div>
@@ -152,7 +156,7 @@ export default function StudentDetailPage() {
             <div className="md:col-span-3 space-y-2 pt-4 border-t">
                  <h3 className="text-lg font-semibold text-foreground pb-2 mb-2">ID Proof</h3>
                 <a href={student.idProofUrl} target="_blank" rel="noopener noreferrer" className="block w-full md:w-1/3">
-                    <Image src={student.idProofUrl} alt="ID Proof" width={400} height={300} className="rounded-md object-cover border hover:opacity-80 transition-opacity" data-ai-hint="identification document" />
+                    <Image src={student.idProofUrl} alt="ID Proof" width={400} height={300} className="rounded-md object-cover border hover:opacity-80 transition-opacity" data-ai-hint="identification document"/>
                 </a>
             </div>
             )}
@@ -163,7 +167,7 @@ export default function StudentDetailPage() {
         <Card className="shadow-xl">
           <CardHeader>
             <CardTitle className="font-headline text-xl text-primary">Payment History</CardTitle>
-            <CardDescription>List of payments made by this student.</CardDescription>
+            <CardDescription>List of payments made by this student in {currentLibraryName || 'this library'}.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto rounded-md border">

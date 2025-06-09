@@ -6,7 +6,7 @@ import { getPaymentTypes, addPaymentType, updatePaymentType } from '@/lib/data';
 import type { PaymentType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { PlusCircle, Edit, Trash2, Loader2, MoreHorizontal, ListChecks, AlertTriangle } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, MoreHorizontal, ListChecks, AlertTriangle, Library } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PaymentTypeForm, type PaymentTypeFormValues } from './FeePlanForm';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -22,7 +22,7 @@ import { useRouter } from 'next/navigation';
 
 
 export default function PaymentTypesPage() {
-  const { currentLibraryId, loading: authLoading } = useAuth();
+  const { currentLibraryId, currentLibraryName, loading: authLoading, isSuperAdmin, allLibraries } = useAuth();
   const router = useRouter();
   const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -46,7 +46,7 @@ export default function PaymentTypesPage() {
         const data = await getPaymentTypes(currentLibraryId);
         setPaymentTypes(data);
     } catch (error) {
-        toast({ title: "Error", description: "Failed to fetch payment types.", variant: "destructive" });
+        toast({ title: "Error", description: `Failed to fetch payment types for ${currentLibraryName || 'the library'}.`, variant: "destructive" });
         setPaymentTypes([]);
     } finally {
         setLoadingData(false);
@@ -58,6 +58,14 @@ export default function PaymentTypesPage() {
   }, [currentLibraryId, authLoading]);
 
   const handleAddClick = () => {
+    if (isSuperAdmin && (!allLibraries || allLibraries.length === 0)) {
+      toast({ title: "Cannot Add Plan", description: "Superadmin must create a library before adding payment types.", variant: "destructive" });
+      return;
+    }
+     if (!currentLibraryId) {
+       toast({ title: "Cannot Add Plan", description: "Please select a library from the header dropdown first.", variant: "destructive" });
+      return;
+    }
     setEditingPaymentType(undefined);
     setIsFormOpen(true);
   };
@@ -74,27 +82,31 @@ export default function PaymentTypesPage() {
         // For now, this is a mock delete.
         // await deletePaymentType(currentLibraryId, planId); // Uncomment when implemented
         setPaymentTypes(prevPlans => prevPlans.filter(p => p.id !== planId));
-        toast({ title: "Success", description: "Payment type deleted (mock)." });
+        toast({ title: "Success", description: `Payment type deleted (mock) from ${currentLibraryName || 'the library'}.` });
         // await fetchData(); // if delete is implemented in lib/data.ts
     }
   };
 
   const handleFormSubmit = async (values: PaymentTypeFormValues) => {
-    if (!currentLibraryId) return;
+    const targetLibId = currentLibraryId; // Add/edit happens in the current global context
+    if (!targetLibId) {
+        toast({ title: "Error", description: "No library selected. Please select a library from the header.", variant: "destructive" });
+        return;
+    }
     setIsSubmitting(true);
     try {
       if (editingPaymentType) {
-        await updatePaymentType(currentLibraryId, editingPaymentType.id, values);
-        toast({ title: "Success", description: "Payment type updated." });
+        await updatePaymentType(targetLibId, editingPaymentType.id, values);
+        toast({ title: "Success", description: `Payment type updated in ${currentLibraryName || 'the library'}.` });
       } else {
-        await addPaymentType(currentLibraryId, values);
-        toast({ title: "Success", description: "Payment type added." });
+        await addPaymentType(targetLibId, values);
+        toast({ title: "Success", description: `Payment type added to ${currentLibraryName || 'the library'}.` });
       }
       await fetchData();
       setIsFormOpen(false);
       setEditingPaymentType(undefined);
     } catch (error) {
-      toast({ title: "Error", description: "Failed to save payment type.", variant: "destructive" });
+      toast({ title: "Error", description: `Failed to save payment type in ${currentLibraryName || 'the library'}.`, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -108,13 +120,28 @@ export default function PaymentTypesPage() {
     );
   }
 
-  if (!currentLibraryId) {
-     return (
+  if (!currentLibraryId && !authLoading) {
+     let message = "Please ensure your user account is correctly set up with a library or select a library if you are a superadmin.";
+     let buttonText = "Go to Dashboard";
+     let buttonAction = () => router.push('/dashboard');
+
+     if (isSuperAdmin && (!allLibraries || allLibraries.length === 0)) {
+        message = "Superadmin must create a library first.";
+        buttonAction = () => router.push('/manage-libraries');
+        buttonText = "Manage Libraries";
+     } else if (isSuperAdmin && allLibraries && allLibraries.length > 0) {
+        message = "Superadmin, please select a library from the header dropdown to manage payment types.";
+     }
+    return (
       <div className="flex flex-col justify-center items-center h-full text-center p-4">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
-        <p className="text-xl font-semibold">No Library Selected / User Misconfiguration</p>
-        <p className="text-muted-foreground">Please ensure your user account is correctly set up with a library or select a library if you are a superadmin.</p>
-        <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
+         <Card className="w-full max-w-md mt-4 shadow-lg">
+          <CardHeader><CardTitle className="text-primary">No Library Selected</CardTitle></CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">{message}</p>
+            <Button onClick={buttonAction} className="mt-4">{buttonText}</Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -131,8 +158,11 @@ export default function PaymentTypesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-headline font-bold text-primary">Payment Types</h1>
-        <Button onClick={handleAddClick}>
+        <div>
+            <h1 className="text-3xl font-headline font-bold text-primary">Payment Types</h1>
+            {currentLibraryName && <p className="text-md text-muted-foreground flex items-center"><Library className="h-4 w-4 mr-2 text-accent" />Managing for: <span className="font-semibold ml-1">{currentLibraryName}</span></p>}
+        </div>
+        <Button onClick={handleAddClick} disabled={!currentLibraryId || (isSuperAdmin && (!allLibraries || allLibraries.length === 0))}>
           <PlusCircle className="mr-2 h-4 w-4" /> Add Payment Type
         </Button>
       </div>
@@ -140,9 +170,13 @@ export default function PaymentTypesPage() {
       <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if (!open) setEditingPaymentType(undefined); }}>
         <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
-                <DialogTitle>{editingPaymentType ? "Edit Payment Type" : "Add New Payment Type"}</DialogTitle>
+                <DialogTitle>
+                    {editingPaymentType ? "Edit Payment Type" : "Add New Payment Type"}
+                    {` for ${currentLibraryName || 'Current Library'}`}
+                </DialogTitle>
                 <DialogDescription>
                     {editingPaymentType ? "Modify the details of the existing payment type." : "Create a new payment type for students."}
+                    {` This will apply to ${currentLibraryName || 'the currently selected library'}.`}
                 </DialogDescription>
             </DialogHeader>
             <PaymentTypeForm 
@@ -157,11 +191,22 @@ export default function PaymentTypesPage() {
 
       <Card className="shadow-xl">
         <CardHeader>
-            <CardTitle>Existing Payment Types</CardTitle>
-            <CardDescription>Manage different payment options for students in the current library.</CardDescription>
+            <CardTitle>Existing Payment Types for {currentLibraryName}</CardTitle>
+            <CardDescription>Manage different payment options for students in this library.</CardDescription>
         </CardHeader>
         <CardContent>
-            {paymentTypes.length > 0 ? (
+            { (isSuperAdmin && (!allLibraries || allLibraries.length === 0)) ? (
+                <div className="text-center py-12">
+                    <Library className="mx-auto h-12 w-12 text-muted-foreground" />
+                    <h3 className="mt-2 text-xl font-semibold">No Libraries Exist</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        Superadmin must create a library before managing payment types.
+                    </p>
+                    <Button className="mt-4" onClick={() => router.push('/manage-libraries')}>
+                        Manage Libraries
+                    </Button>
+                </div>
+            ) : paymentTypes.length > 0 ? (
             <div className="overflow-x-auto rounded-md border">
             <Table>
                 <TableHeader>
@@ -206,9 +251,9 @@ export default function PaymentTypesPage() {
                 <ListChecks className="mx-auto h-12 w-12 text-muted-foreground" />
                 <h3 className="mt-2 text-xl font-semibold">No Payment Types Found</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                    Add a new payment type to start for this library.
+                    Add a new payment type to start for {currentLibraryName || 'this library'}.
                 </p>
-                 <Button className="mt-4" onClick={handleAddClick}>
+                 <Button className="mt-4" onClick={handleAddClick} disabled={!currentLibraryId}>
                     <PlusCircle className="mr-2 h-4 w-4" /> Add Payment Type
                 </Button>
             </div>

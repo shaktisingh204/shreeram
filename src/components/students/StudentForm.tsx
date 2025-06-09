@@ -25,7 +25,7 @@ import { Loader2, Eye } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getSeats, getPaymentTypes } from "@/lib/data";
 import Image from "next/image";
-import { useAuth } from "@/context/AuthContext"; // For isSuperAdmin check
+// Removed useAuth import as isSuperAdmin check is no longer needed here for library selection
 
 const NONE_SELECT_VALUE = "__NONE__";
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -76,14 +76,12 @@ interface StudentFormProps {
   initialData?: Student;
   onSubmit: (values: StudentSubmitValues) => Promise<void>;
   isSubmitting: boolean;
-  currentLibraryId: string | null; // User's current global library context
-  formModeTargetLibraryId?: string; // Specific library chosen in the form (for superadmin add mode)
+  currentLibraryId: string | null; // User's current global library context, or target library for adding
 }
 
-export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibraryId, formModeTargetLibraryId }: StudentFormProps) {
+export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibraryId }: StudentFormProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const { isSuperAdmin } = useAuth(); // To know if we should use formModeTargetLibraryId
 
   const [availableSeats, setAvailableSeats] = useState<Seat[]>([]);
   const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]);
@@ -92,11 +90,9 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
   const [photoPreview, setPhotoPreview] = useState<string | null>(initialData?.photoUrl || null);
   const [idProofFileName, setIdProofFileName] = useState<string | null>(initialData?.idProofUrl ? "Existing ID Proof" : null);
 
-  // Determine the library ID to use for fetching seats and payment types
-  const libraryIdForDropdowns = 
-    (!initialData && isSuperAdmin && formModeTargetLibraryId) // Superadmin adding to a specific library
-    ? formModeTargetLibraryId 
-    : currentLibraryId; // Manager adding, or anyone editing (student's current library is the context)
+  // The library ID to use for fetching seats and payment types is now always currentLibraryId
+  // as the parent component (add/edit page) determines the correct context.
+  const libraryIdForDropdowns = currentLibraryId;
 
   useEffect(() => {
     async function fetchDataForDropdowns() {
@@ -104,8 +100,8 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
         setLoadingDropdownData(false);
         setAvailableSeats([]);
         setPaymentTypes([]);
-        // Optionally toast if it's unexpected (e.g., not during initial load of add page)
-        if (initialData || (!isSuperAdmin && !formModeTargetLibraryId)) { // Only toast if context was expected
+        // Only toast if context was expected for an existing student or manager adding
+        if (initialData) { 
              toast({ title: "Error", description: "Library context not available for fetching form options.", variant: "destructive"});
         }
         return;
@@ -128,7 +124,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
       }
     }
     fetchDataForDropdowns();
-  }, [initialData, libraryIdForDropdowns, toast, isSuperAdmin, formModeTargetLibraryId]);
+  }, [initialData, libraryIdForDropdowns, toast]);
 
 
   const form = useForm<StudentFormValues>({
@@ -166,10 +162,11 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
     },
   });
 
-  // Reset seatId and paymentTypeId if the library for dropdowns changes
-  // and the form is in "add" mode or the existing selection is no longer valid.
+  // Reset seatId and paymentTypeId if the library for dropdowns changes in "add" mode.
   useEffect(() => {
-    if (!initialData) { // Only for add mode
+    if (!initialData && libraryIdForDropdowns) { 
+        // If we are in add mode and the library context changes (e.g. superadmin switches global context)
+        // re-fetch dropdowns and reset selections.
         form.resetField("seatId", { defaultValue: NONE_SELECT_VALUE });
         form.resetField("paymentTypeId", { defaultValue: NONE_SELECT_VALUE });
     }
@@ -204,8 +201,6 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
 
 
   const handleFormSubmit = async (values: StudentFormValues) => {
-    // The actual library ID for submission is determined in the parent (AddStudentPage)
-    // This form just prepares the student data
     try {
       const { photoUpload, idProofUpload, photoUrl: initialPhotoUrl, idProofUrl: initialIdProofUrl, ...restOfFormValues } = values;
       

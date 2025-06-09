@@ -44,7 +44,7 @@ import { useRouter } from 'next/navigation';
 
 
 export default function SeatsPage() {
-  const { currentLibraryId, currentLibraryName, loading: authLoading } = useAuth();
+  const { currentLibraryId, currentLibraryName, loading: authLoading, isSuperAdmin, allLibraries } = useAuth();
   const router = useRouter();
   const [allSeats, setAllSeats] = useState<Seat[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -92,7 +92,7 @@ export default function SeatsPage() {
 
   useEffect(() => {
     fetchAllData();
-  }, [currentLibraryId, authLoading]); // Simplified dependencies
+  }, [currentLibraryId, authLoading]); 
 
   const seatsByFloor = useMemo(() => {
     return allSeats.reduce((acc, seat) => {
@@ -148,6 +148,14 @@ export default function SeatsPage() {
   };
 
   const openAddSeatDialog = () => {
+    if (isSuperAdmin && (!allLibraries || allLibraries.length === 0)) {
+      toast({ title: "Cannot Add Seat", description: "Superadmin must create a library before adding seats.", variant: "destructive" });
+      return;
+    }
+    if (!currentLibraryId) {
+       toast({ title: "Cannot Add Seat", description: "Please select a library from the header dropdown first.", variant: "destructive" });
+      return;
+    }
     setEditingSeat(null);
     setSeatFormDialogMode('add');
     setIsSeatFormOpen(true);
@@ -160,17 +168,19 @@ export default function SeatsPage() {
   };
 
   const handleSeatFormSubmit = async (values: SeatFormValues) => {
-    if (!currentLibraryId) {
-        toast({ title: "Error", description: "No library selected to save the seat.", variant: "destructive" });
+    // For adding a seat, currentLibraryId (from global context) is used as the target.
+    const targetLibId = currentLibraryId; 
+    if (!targetLibId) {
+        toast({ title: "Error", description: "No library selected to save the seat. Please select a library from the header.", variant: "destructive" });
         return;
     }
     setIsSubmitting(true);
     try {
       if (seatFormDialogMode === 'edit' && editingSeat) {
-        await updateSeatDetails(currentLibraryId, editingSeat.id, values);
+        await updateSeatDetails(targetLibId, editingSeat.id, values); // Edit happens in current context
         toast({ title: "Success", description: `Seat updated successfully in ${currentLibraryName}.` });
       } else {
-        await addSeat(currentLibraryId, values);
+        await addSeat(targetLibId, values); // Add happens to current context
         toast({ title: "Success", description: `Seat added successfully to ${currentLibraryName}.` });
       }
       await fetchAllData();
@@ -211,13 +221,29 @@ export default function SeatsPage() {
     );
   }
 
-  if (!currentLibraryId) {
+  if (!currentLibraryId && !authLoading) { // Covers managers without context and superadmins who haven't selected one AND have no libraries
+     let message = "Please ensure your user account is correctly set up with a library or select a library if you are a superadmin.";
+     let buttonText = "Go to Dashboard";
+     let buttonAction = () => router.push('/dashboard');
+
+     if (isSuperAdmin && (!allLibraries || allLibraries.length === 0)) {
+        message = "Superadmin must create a library first.";
+        buttonAction = () => router.push('/manage-libraries');
+        buttonText = "Manage Libraries";
+     } else if (isSuperAdmin && allLibraries && allLibraries.length > 0) {
+        message = "Superadmin, please select a library from the header dropdown to manage seats.";
+     }
+
     return (
       <div className="flex flex-col justify-center items-center h-full text-center p-4">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
-        <p className="text-xl font-semibold">No Library Selected / User Misconfiguration</p>
-        <p className="text-muted-foreground">Please ensure your user account is correctly set up with a library or select a library if you are a superadmin.</p>
-        <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
+         <Card className="w-full max-w-md mt-4 shadow-lg">
+          <CardHeader><CardTitle className="text-primary">No Library Selected</CardTitle></CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">{message}</p>
+            <Button onClick={buttonAction} className="mt-4">{buttonText}</Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -235,7 +261,7 @@ export default function SeatsPage() {
             {currentLibraryName && <p className="text-md text-muted-foreground flex items-center"><Library className="h-4 w-4 mr-2 text-accent" />Managing seats for: <span className="font-semibold ml-1">{currentLibraryName}</span></p>}
         </div>
         <div className="flex items-center gap-4">
-           <Button onClick={openAddSeatDialog}>
+           <Button onClick={openAddSeatDialog} disabled={!currentLibraryId || (isSuperAdmin && (!allLibraries || allLibraries.length === 0))}>
             <PlusCircle className="mr-2 h-4 w-4" /> Add New Seat
           </Button>
           <div className="flex items-center gap-2">
@@ -249,7 +275,21 @@ export default function SeatsPage() {
         </div>
       </div>
 
-      {Object.keys(seatsByFloor).length > 0 ? (
+      { (isSuperAdmin && (!allLibraries || allLibraries.length === 0)) ? (
+         <Card className="shadow-xl">
+            <CardHeader>
+                <CardTitle>No Libraries Exist</CardTitle>
+                <CardDescription>Superadmin must create a library before adding seats.</CardDescription>
+            </CardHeader>
+            <CardContent className="text-center py-8">
+                 <Library className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">Please go to "Manage Libraries" to create your first library.</p>
+                <Button className="mt-4" onClick={() => router.push('/manage-libraries')}>
+                     Manage Libraries
+                </Button>
+            </CardContent>
+        </Card>
+      ) : Object.keys(seatsByFloor).length > 0 ? (
         <Accordion type="multiple" defaultValue={defaultAccordionOpen} className="w-full">
           {Object.entries(seatsByFloor).map(([floor, floorSeats]) => (
             <AccordionItem value={floor} key={floor}>
@@ -317,22 +357,21 @@ export default function SeatsPage() {
             <CardContent className="text-center py-8">
                  <Armchair className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
                 <p className="text-muted-foreground">No seats have been configured yet for {currentLibraryName || "this library"}.</p>
-                <Button className="mt-4" onClick={openAddSeatDialog}>
+                <Button className="mt-4" onClick={openAddSeatDialog} disabled={!currentLibraryId}>
                     <PlusCircle className="mr-2 h-4 w-4" /> Add First Seat to {currentLibraryName || "Library"}
                 </Button>
             </CardContent>
         </Card>
       )}
       
-      {/* Assign/Manage Seat Dialog */}
       <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Update Seat: {selectedSeatForAssignment?.seatNumber} ({selectedSeatForAssignment?.floor})</DialogTitle>
+            <DialogTitle>Update Seat: {selectedSeatForAssignment?.seatNumber} ({selectedSeatForAssignment?.floor}) in {currentLibraryName || 'Library'}</DialogTitle>
             <DialogDescription>
               {selectedSeatForAssignment?.isOccupied 
-                ? `This seat in ${currentLibraryName || 'the current library'} is taken by ${selectedSeatForAssignment.studentName}. You can assign it to someone else or make it empty.`
-                : `Choose a student for this seat in ${currentLibraryName || 'the current library'}.`}
+                ? `This seat is taken by ${selectedSeatForAssignment.studentName}. You can assign it to someone else or make it empty.`
+                : `Choose a student for this seat.`}
             </DialogDescription>
           </DialogHeader>
           
@@ -359,7 +398,7 @@ export default function SeatsPage() {
               <Button variant="destructive" onClick={handleUnassignSeat} disabled={isSubmitting}>
                 {isSubmitting && selectedSeatForAssignment?.studentId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Make Seat Empty
               </Button>
-            ) : <div/> /* Placeholder for alignment */}
+            ) : <div/> }
             <div className="flex gap-2 mt-2 sm:mt-0">
               <DialogClose asChild>
                 <Button type="button" variant="outline">Cancel</Button>
@@ -377,7 +416,6 @@ export default function SeatsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Add/Edit Seat Dialog */}
       <Dialog open={isSeatFormOpen} onOpenChange={(open) => {if(!open) setEditingSeat(null); setIsSeatFormOpen(open);}}>
         <DialogContent>
             <DialogHeader>
@@ -389,8 +427,9 @@ export default function SeatsPage() {
                 </DialogTitle>
                 <DialogDescription>
                     {seatFormDialogMode === 'edit' ? 
-                        `Modify the details of this seat in ${currentLibraryName || 'the current library'}.` : 
-                        `Add a new seat to ${currentLibraryName || 'the current library'}.`}
+                        `Modify the details of this seat.` : 
+                        `Add a new seat.`}
+                     {` This will apply to ${currentLibraryName || 'the currently selected library'}.`}
                 </DialogDescription>
             </DialogHeader>
           <SeatForm 
@@ -404,7 +443,6 @@ export default function SeatsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
         <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
             <AlertDialogContent>
                 <AlertDialogHeader>
@@ -424,10 +462,6 @@ export default function SeatsPage() {
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
-
     </div>
   );
 }
-
-
-    
