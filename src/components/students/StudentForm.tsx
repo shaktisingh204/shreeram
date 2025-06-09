@@ -25,6 +25,7 @@ import { Loader2, Eye } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getSeats, getPaymentTypes } from "@/lib/data";
 import Image from "next/image";
+import { useAuth } from "@/context/AuthContext"; // For isSuperAdmin check
 
 const NONE_SELECT_VALUE = "__NONE__";
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -75,12 +76,15 @@ interface StudentFormProps {
   initialData?: Student;
   onSubmit: (values: StudentSubmitValues) => Promise<void>;
   isSubmitting: boolean;
-  currentLibraryId: string | null; // Added prop
+  currentLibraryId: string | null; // User's current global library context
+  formModeTargetLibraryId?: string; // Specific library chosen in the form (for superadmin add mode)
 }
 
-export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibraryId }: StudentFormProps) {
+export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibraryId, formModeTargetLibraryId }: StudentFormProps) {
   const router = useRouter();
   const { toast } = useToast();
+  const { isSuperAdmin } = useAuth(); // To know if we should use formModeTargetLibraryId
+
   const [availableSeats, setAvailableSeats] = useState<Seat[]>([]);
   const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]);
   const [loadingDropdownData, setLoadingDropdownData] = useState(true);
@@ -88,31 +92,44 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
   const [photoPreview, setPhotoPreview] = useState<string | null>(initialData?.photoUrl || null);
   const [idProofFileName, setIdProofFileName] = useState<string | null>(initialData?.idProofUrl ? "Existing ID Proof" : null);
 
+  // Determine the library ID to use for fetching seats and payment types
+  const libraryIdForDropdowns = 
+    (!initialData && isSuperAdmin && formModeTargetLibraryId) // Superadmin adding to a specific library
+    ? formModeTargetLibraryId 
+    : currentLibraryId; // Manager adding, or anyone editing (student's current library is the context)
 
   useEffect(() => {
-    async function fetchData() {
-      if (!currentLibraryId) {
+    async function fetchDataForDropdowns() {
+      if (!libraryIdForDropdowns) {
         setLoadingDropdownData(false);
-        toast({ title: "Error", description: "Library context not available for fetching form data.", variant: "destructive"});
+        setAvailableSeats([]);
+        setPaymentTypes([]);
+        // Optionally toast if it's unexpected (e.g., not during initial load of add page)
+        if (initialData || (!isSuperAdmin && !formModeTargetLibraryId)) { // Only toast if context was expected
+             toast({ title: "Error", description: "Library context not available for fetching form options.", variant: "destructive"});
+        }
         return;
       }
       setLoadingDropdownData(true);
       try {
-        const seatsData = await getSeats(currentLibraryId);
-        const currentSeatId = initialData?.seatId;
-        setAvailableSeats(seatsData.filter(seat => !seat.isOccupied || seat.id === currentSeatId));
+        const seatsData = await getSeats(libraryIdForDropdowns);
+        const currentStudentSeatId = initialData?.seatId;
+        setAvailableSeats(seatsData.filter(seat => !seat.isOccupied || seat.id === currentStudentSeatId));
         
-        const plans = await getPaymentTypes(currentLibraryId);
+        const plans = await getPaymentTypes(libraryIdForDropdowns);
         setPaymentTypes(plans);
       } catch (error) {
         console.error("Error fetching seats/payment types for student form:", error);
-        toast({ title: "Form Error", description: "Could not load seat or payment type options.", variant: "destructive"});
+        toast({ title: "Form Error", description: `Could not load seat or payment type options for the selected library. ${(error as Error).message}`, variant: "destructive"});
+        setAvailableSeats([]);
+        setPaymentTypes([]);
       } finally {
         setLoadingDropdownData(false);
       }
     }
-    fetchData();
-  }, [initialData, currentLibraryId, toast]);
+    fetchDataForDropdowns();
+  }, [initialData, libraryIdForDropdowns, toast, isSuperAdmin, formModeTargetLibraryId]);
+
 
   const form = useForm<StudentFormValues>({
     resolver: zodResolver(studentFormSchema),
@@ -149,6 +166,16 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
     },
   });
 
+  // Reset seatId and paymentTypeId if the library for dropdowns changes
+  // and the form is in "add" mode or the existing selection is no longer valid.
+  useEffect(() => {
+    if (!initialData) { // Only for add mode
+        form.resetField("seatId", { defaultValue: NONE_SELECT_VALUE });
+        form.resetField("paymentTypeId", { defaultValue: NONE_SELECT_VALUE });
+    }
+  }, [libraryIdForDropdowns, initialData, form]);
+
+
   const watchedPhotoUpload = form.watch('photoUpload');
   const watchedIdProofUpload = form.watch('idProofUpload');
 
@@ -177,10 +204,8 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
 
 
   const handleFormSubmit = async (values: StudentFormValues) => {
-    if (!currentLibraryId) {
-      toast({ title: "Error", description: "Cannot submit form without library context.", variant: "destructive" });
-      return;
-    }
+    // The actual library ID for submission is determined in the parent (AddStudentPage)
+    // This form just prepares the student data
     try {
       const { photoUpload, idProofUpload, photoUrl: initialPhotoUrl, idProofUrl: initialIdProofUrl, ...restOfFormValues } = values;
       
@@ -214,6 +239,9 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
       });
     }
   };
+  
+  const isFormEffectivelyDisabled = isSubmitting || loadingDropdownData || !libraryIdForDropdowns;
+
 
   return (
     <Card className="max-w-2xl mx-auto shadow-xl">
@@ -350,10 +378,10 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Choose Seat (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={loadingDropdownData}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={loadingDropdownData || !libraryIdForDropdowns}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder={loadingDropdownData ? "Loading seats..." : "Choose a seat"} />
+                          <SelectValue placeholder={loadingDropdownData ? "Loading seats..." : ( !libraryIdForDropdowns ? "Select library first" : "Choose a seat")} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -363,6 +391,9 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
                             {seat.seatNumber} ({seat.floor})
                           </SelectItem>
                         ))}
+                        {availableSeats.length === 0 && !loadingDropdownData && libraryIdForDropdowns && (
+                            <p className="p-2 text-xs text-muted-foreground">No available seats in selected library.</p>
+                        )}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -412,10 +443,10 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Payment Type (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={loadingDropdownData}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={loadingDropdownData || !libraryIdForDropdowns}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder={loadingDropdownData ? "Loading types..." : "Choose a payment type"} />
+                          <SelectValue placeholder={loadingDropdownData ? "Loading types..." : (!libraryIdForDropdowns ? "Select library first" : "Choose a payment type")} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -425,6 +456,9 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
                             {plan.name} (INR{plan.amount}/{plan.frequency})
                           </SelectItem>
                         ))}
+                        {paymentTypes.length === 0 && !loadingDropdownData && libraryIdForDropdowns && (
+                            <p className="p-2 text-xs text-muted-foreground">No payment types in selected library.</p>
+                        )}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -450,7 +484,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
             <Button type="button" variant="outline" onClick={() => router.back()}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting || loadingDropdownData || !currentLibraryId}>
+            <Button type="submit" disabled={isFormEffectivelyDisabled}>
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {initialData ? "Save Changes" : "Add Student"}
             </Button>
@@ -460,4 +494,3 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
     </Card>
   );
 }
-
