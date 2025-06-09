@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { StudentForm, type StudentFormValues } from '@/components/students/StudentForm';
+import { StudentForm, type StudentSubmitValues } from '@/components/students/StudentForm'; // Updated import
 import { getStudentById, updateStudent } from '@/lib/data';
 import type { Student } from '@/types';
 import { useToast } from '@/hooks/use-toast';
@@ -42,10 +42,10 @@ export default function EditStudentPage({ params }: EditStudentPageProps) {
     }
   }, [studentId, toast, router]);
 
-  const handleSubmit = async (values: StudentFormValues) => {
+  const handleSubmit = async (values: StudentSubmitValues) => { // Updated type
     setIsSubmitting(true);
     try {
-      await updateStudent(studentId as string, values);
+      await updateStudent(studentId as string, values); // updateStudent now expects StudentSubmitValues compatible type
       toast({
         title: "Success",
         description: "Student details saved.",
@@ -56,7 +56,7 @@ export default function EditStudentPage({ params }: EditStudentPageProps) {
        console.error("Failed to update student:", error);
       toast({
         title: "Error",
-        description: "Could not save student details. Please try again.",
+        description: (error as Error).message || "Could not save student details. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -82,3 +82,5 @@ export default function EditStudentPage({ params }: EditStudentPageProps) {
     </div>
   );
 }
+
+    

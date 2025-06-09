@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from 'react';
-import { StudentForm, type StudentFormValues } from '@/components/students/StudentForm';
+import { StudentForm, type StudentSubmitValues } from '@/components/students/StudentForm'; // Updated import
 import { addStudent } from '@/lib/data';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -12,10 +12,10 @@ export default function AddStudentPage() {
   const { toast } = useToast();
   const router = useRouter();
 
-  const handleSubmit = async (values: StudentFormValues) => {
+  const handleSubmit = async (values: StudentSubmitValues) => { // Updated type
     setIsSubmitting(true);
     try {
-      await addStudent(values);
+      await addStudent(values); // addStudent now expects StudentSubmitValues compatible type
       toast({
         title: "Success",
         description: "New student added.",
@@ -26,7 +26,7 @@ export default function AddStudentPage() {
       console.error("Failed to add student:", error);
       toast({
         title: "Error",
-        description: "Could not add new student. Please try again.",
+        description: (error as Error).message || "Could not add new student. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -40,3 +40,5 @@ export default function AddStudentPage() {
     </div>
   );
 }
+
+    

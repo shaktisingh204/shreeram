@@ -17,34 +17,57 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { Student, Seat, PaymentType } from "@/types"; // Renamed FeePlan to PaymentType
+import type { Student, Seat, PaymentType } from "@/types";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { Loader2, Eye, UploadCloud } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getSeats, getPaymentTypes } from "@/lib/data"; // Renamed getFeePlans
+import { getSeats, getPaymentTypes } from "@/lib/data";
+import Image from "next/image";
 
-const NONE_SELECT_VALUE = "__NONE__"; 
+const NONE_SELECT_VALUE = "__NONE__";
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 
 const studentFormSchema = z.object({
   fullName: z.string().min(2, { message: "Full name must be at least 2 characters." }).max(100),
   contactDetails: z.string().email({ message: "Invalid email address." }),
+  notes: z.string().max(500).optional(),
+  seatId: z.string(),
+  status: z.enum(["enrolled", "owing", "inactive"]),
+  feesDue: z.coerce.number().min(0, { message: "Amount to Pay cannot be negative." }),
+  enrollmentDate: z.string().refine((date) => !isNaN(Date.parse(date)), { message: "Invalid date format." }),
+  paymentTypeId: z.string(),
+  // For existing string URLs
   photoUrl: z.string().url({ message: "Invalid URL for photo." }).optional().or(z.literal('')),
   idProofUrl: z.string().url({ message: "Invalid URL for ID proof." }).optional().or(z.literal('')),
-  notes: z.string().max(500).optional(),
-  seatId: z.string(), 
-  status: z.enum(["enrolled", "owing", "inactive"]),
-  feesDue: z.coerce.number().min(0, { message: "Amount to Pay cannot be negative." }), // Updated message
-  enrollmentDate: z.string().refine((date) => !isNaN(Date.parse(date)), { message: "Invalid date format." }),
-  paymentTypeId: z.string(), // Renamed from feePlanId
+  // For new file uploads
+  photoUpload: z.instanceof(FileList).optional()
+    .refine(files => !files || files.length === 0 || files[0].size <= MAX_FILE_SIZE, `Max photo size is 5MB.`)
+    .refine(files => !files || files.length === 0 || ACCEPTED_IMAGE_TYPES.includes(files[0].type), "Only .jpg, .jpeg, .png and .webp formats are supported."),
+  idProofUpload: z.instanceof(FileList).optional()
+    .refine(files => !files || files.length === 0 || files[0].size <= MAX_FILE_SIZE, `Max ID proof size is 5MB.`),
 });
 
 export type StudentFormValues = z.infer<typeof studentFormSchema>;
 
+export interface StudentSubmitValues {
+  fullName: string;
+  contactDetails: string;
+  notes?: string;
+  seatId?: string;
+  status: 'enrolled' | 'owing' | 'inactive';
+  feesDue: number;
+  enrollmentDate: string;
+  paymentTypeId?: string;
+  photo?: File | string;
+  idProof?: File | string;
+}
+
 interface StudentFormProps {
   initialData?: Student;
-  onSubmit: (values: Omit<StudentFormValues, 'seatId' | 'paymentTypeId'> & { seatId?: string; paymentTypeId?: string }) => Promise<void>; // Renamed feePlanId
+  onSubmit: (values: StudentSubmitValues) => Promise<void>;
   isSubmitting: boolean;
 }
 
@@ -52,7 +75,11 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
   const router = useRouter();
   const { toast } = useToast();
   const [availableSeats, setAvailableSeats] = useState<Seat[]>([]);
-  const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]); // Renamed from feePlans
+  const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]);
+  
+  const [photoPreview, setPhotoPreview] = useState<string | null>(initialData?.photoUrl || null);
+  const [idProofFileName, setIdProofFileName] = useState<string | null>(initialData?.idProofUrl ? "Existing ID Proof" : null);
+
 
   useEffect(() => {
     async function fetchData() {
@@ -60,7 +87,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
       const currentSeatId = initialData?.seatId;
       setAvailableSeats(seatsData.filter(seat => !seat.isOccupied || seat.id === currentSeatId));
       
-      const plans = await getPaymentTypes(); // Renamed function
+      const plans = await getPaymentTypes();
       setPaymentTypes(plans);
     }
     fetchData();
@@ -72,11 +99,13 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
       ...initialData,
       feesDue: initialData.feesDue || 0,
       enrollmentDate: initialData.enrollmentDate || new Date().toISOString().split('T')[0],
-      seatId: initialData.seatId || NONE_SELECT_VALUE, 
-      paymentTypeId: initialData.paymentTypeId || NONE_SELECT_VALUE, // Renamed from feePlanId
-      photoUrl: initialData.photoUrl || "",
-      idProofUrl: initialData.idProofUrl || "",
+      seatId: initialData.seatId || NONE_SELECT_VALUE,
+      paymentTypeId: initialData.paymentTypeId || NONE_SELECT_VALUE,
+      photoUrl: initialData.photoUrl || "", // Keep existing URL for reference
+      idProofUrl: initialData.idProofUrl || "", // Keep existing URL for reference
       notes: initialData.notes || "",
+      photoUpload: undefined,
+      idProofUpload: undefined,
     } : {
       fullName: "",
       contactDetails: "",
@@ -84,21 +113,65 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
       idProofUrl: "",
       notes: "",
       seatId: NONE_SELECT_VALUE,
-      status: "enrolled", // Default to 'Active' or 'Enrolled'
+      status: "enrolled",
       feesDue: 0,
       enrollmentDate: new Date().toISOString().split('T')[0],
-      paymentTypeId: NONE_SELECT_VALUE, // Renamed from feePlanId
+      paymentTypeId: NONE_SELECT_VALUE,
+      photoUpload: undefined,
+      idProofUpload: undefined,
     },
   });
 
+  const watchedPhotoUpload = form.watch('photoUpload');
+  const watchedIdProofUpload = form.watch('idProofUpload');
+
+  useEffect(() => {
+    if (watchedPhotoUpload && watchedPhotoUpload.length > 0) {
+      const file = watchedPhotoUpload[0];
+      const objectUrl = URL.createObjectURL(file);
+      setPhotoPreview(objectUrl);
+      return () => URL.revokeObjectURL(objectUrl);
+    } else if (initialData?.photoUrl) {
+       setPhotoPreview(initialData.photoUrl); // Revert to initial if selection is cleared
+    } else {
+        setPhotoPreview(null);
+    }
+  }, [watchedPhotoUpload, initialData?.photoUrl]);
+
+  useEffect(() => {
+    if (watchedIdProofUpload && watchedIdProofUpload.length > 0) {
+      setIdProofFileName(watchedIdProofUpload[0].name);
+    } else if (initialData?.idProofUrl) {
+      setIdProofFileName("Existing ID Proof"); // Revert to initial if selection is cleared
+    } else {
+      setIdProofFileName(null);
+    }
+  }, [watchedIdProofUpload, initialData?.idProofUrl]);
+
+
   const handleFormSubmit = async (values: StudentFormValues) => {
     try {
-      const submissionValues = {
-        ...values,
+      const { photoUpload, idProofUpload, photoUrl: initialPhotoUrl, idProofUrl: initialIdProofUrl, ...restOfFormValues } = values;
+      
+      const submissionData: StudentSubmitValues = {
+        ...restOfFormValues, // this includes fullName, contactDetails, notes, status, feesDue, enrollmentDate
         seatId: values.seatId === NONE_SELECT_VALUE ? undefined : values.seatId,
-        paymentTypeId: values.paymentTypeId === NONE_SELECT_VALUE ? undefined : values.paymentTypeId, // Renamed from feePlanId
+        paymentTypeId: values.paymentTypeId === NONE_SELECT_VALUE ? undefined : values.paymentTypeId,
       };
-      await onSubmit(submissionValues);
+
+      if (photoUpload && photoUpload.length > 0) {
+        submissionData.photo = photoUpload[0];
+      } else {
+        submissionData.photo = initialPhotoUrl; 
+      }
+
+      if (idProofUpload && idProofUpload.length > 0) {
+        submissionData.idProof = idProofUpload[0];
+      } else {
+        submissionData.idProof = initialIdProofUrl;
+      }
+      
+      await onSubmit(submissionData);
     } catch (error) {
       toast({
         title: "Error",
@@ -144,36 +217,42 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                 </FormItem>
               )}
             />
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <FormField
-              control={form.control}
-              name="photoUrl"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Photo URL (Optional)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="https://example.com/photo.jpg" {...field} value={field.value ?? ""} />
-                  </FormControl>
-                   <FormDescription>Link to student's photo. Use https://placehold.co for placeholders.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="idProofUrl"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>ID Proof URL (Optional)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="https://example.com/id.pdf" {...field} value={field.value ?? ""} />
-                  </FormControl>
-                   <FormDescription>Link to student's ID proof. Use https://placehold.co for placeholders.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormItem>
+                <FormLabel htmlFor="photoUpload">Student Photo (Optional)</FormLabel>
+                <FormControl>
+                  <Input id="photoUpload" type="file" accept="image/*" {...form.register("photoUpload")} className="pt-2"/>
+                </FormControl>
+                <FormDescription>Max 5MB. JPG, PNG, WebP accepted.</FormDescription>
+                <FormMessage>{form.formState.errors.photoUpload?.message}</FormMessage>
+                {photoPreview && (
+                  <div className="mt-2">
+                    <Image src={photoPreview} alt="Photo preview" width={100} height={100} className="rounded-md object-cover" data-ai-hint="student photo"/>
+                  </div>
+                )}
+              </FormItem>
+
+              <FormItem>
+                <FormLabel htmlFor="idProofUpload">ID Proof (Optional)</FormLabel>
+                <FormControl>
+                  <Input id="idProofUpload" type="file" {...form.register("idProofUpload")} className="pt-2"/>
+                </FormControl>
+                <FormDescription>Max 5MB. PDF or image accepted.</FormDescription>
+                <FormMessage>{form.formState.errors.idProofUpload?.message}</FormMessage>
+                {idProofFileName && (
+                    <div className="mt-2 text-sm text-muted-foreground">
+                        Selected: {idProofFileName}
+                        {initialData?.idProofUrl && idProofFileName === "Existing ID Proof" && (
+                             <a href={initialData.idProofUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-primary hover:underline">
+                                <Eye className="inline h-4 w-4 mr-1"/>View
+                            </a>
+                        )}
+                    </div>
+                )}
+              </FormItem>
             </div>
+
              <FormField
               control={form.control}
               name="enrollmentDate"
@@ -252,7 +331,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
               />
               <FormField
                 control={form.control}
-                name="paymentTypeId" // Renamed from feePlanId
+                name="paymentTypeId"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Payment Type (Optional)</FormLabel>
@@ -264,7 +343,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                       </FormControl>
                       <SelectContent>
                         <SelectItem value={NONE_SELECT_VALUE}>No Payment Type</SelectItem>
-                        {paymentTypes.map(plan => ( // Renamed feePlans to paymentTypes
+                        {paymentTypes.map(plan => (
                           <SelectItem key={plan.id} value={plan.id}>
                             {plan.name} (₹{plan.amount}/{plan.frequency})
                           </SelectItem>
@@ -304,3 +383,5 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
     </Card>
   );
 }
+
+    
