@@ -15,160 +15,156 @@
       "id": "library_main",
       "name": "Main Library (Default)",
       "createdAt": "2024-01-01T00:00:00.000Z"
+    },
+    "library_branch_a": {
+      "id": "library_branch_a",
+      "name": "Branch A - North Campus",
+      "createdAt": "2024-02-15T00:00:00.000Z"
     }
   },
   "libraries": {
     "library_main": {
       "students": {
-        "student_001": {
-          "id": "student_001",
-          "fullName": "Aarav Sharma",
+        "student_001_main": {
+          "id": "student_001_main",
+          "fullName": "Aarav Sharma (Main)",
           "photoUrl": "https://placehold.co/100x100.png?text=AS",
-          "contactDetails": "aarav.sharma@example.com",
+          "contactDetails": "aarav.sharma.main@example.com",
           "mobileNumber": "9876543210",
           "fatherName": "Rajesh Sharma",
           "address": "123 Park Avenue, New Delhi, Delhi 110001",
-          "idProofUrl": "https://placehold.co/200x150.png?text=AaravID",
-          "notes": "Enthusiastic learner, preparing for engineering entrance exams.",
-          "seatId": "seat_001",
+          "idProofUrl": "https://placehold.co/200x150.png?text=AaravIDMain",
+          "notes": "Enthusiastic learner, main library.",
+          "seatId": "seat_001_main",
           "status": "enrolled",
           "feesDue": 0,
           "lastPaymentDate": "2024-07-05",
           "enrollmentDate": "2024-01-10",
-          "paymentTypeId": "pt_001"
+          "paymentTypeId": "pt_001_main"
         },
-        "student_002": {
-          "id": "student_002",
-          "fullName": "Priya Singh",
+        "student_002_main": {
+          "id": "student_002_main",
+          "fullName": "Priya Singh (Main)",
           "photoUrl": "https://placehold.co/100x100.png?text=PS",
-          "contactDetails": "priya.singh@example.com",
+          "contactDetails": "priya.singh.main@example.com",
           "mobileNumber": "9988776655",
           "fatherName": "Anil Singh",
           "address": "45 MG Road, Bangalore, Karnataka 560001",
-          "idProofUrl": "https://placehold.co/200x150.png?text=PriyaID",
-          "notes": "Dedicated student, aims for medical school.",
-          "seatId": "seat_003",
+          "idProofUrl": "https://placehold.co/200x150.png?text=PriyaIDMain",
+          "notes": "Dedicated student, main library.",
+          "seatId": "seat_003_main",
           "status": "owing",
           "feesDue": 2500,
           "lastPaymentDate": "2024-06-10",
           "enrollmentDate": "2024-02-15",
-          "paymentTypeId": "pt_002"
-        },
-        "student_003": {
-          "id": "student_003",
-          "fullName": "Rohan Mehta",
-          "photoUrl": "https://placehold.co/100x100.png?text=RM",
-          "contactDetails": "rohan.mehta@example.com",
-          "mobileNumber": null,
-          "fatherName": "Vikas Mehta",
-          "address": "789 Ocean Drive, Mumbai, Maharashtra 400001",
-          "idProofUrl": null,
-          "notes": "Focusing on commerce subjects.",
-          "seatId": null,
-          "status": "enrolled",
-          "feesDue": 0,
-          "lastPaymentDate": "2024-07-01",
-          "enrollmentDate": "2024-03-01",
-          "paymentTypeId": "pt_001"
-        },
-        "student_004": {
-          "id": "student_004",
-          "fullName": "Sneha Reddy",
-          "photoUrl": "https://placehold.co/100x100.png?text=SR",
-          "contactDetails": "sneha.reddy@example.com",
-          "mobileNumber": "9123456789",
-          "fatherName": "Suresh Reddy",
-          "address": "Plot 10, Jubilee Hills, Hyderabad, Telangana 500033",
-          "idProofUrl": "https://placehold.co/200x150.png?text=SnehaID",
-          "notes": "New admission.",
-          "seatId": "seat_005",
-          "status": "inactive",
-          "feesDue": 6000,
-          "lastPaymentDate": null,
-          "enrollmentDate": "2024-07-20",
-          "paymentTypeId": "pt_001"
+          "paymentTypeId": "pt_002_main"
         }
       },
       "seats": {
-        "seat_001": {
-          "id": "seat_001",
+        "seat_001_main": {
+          "id": "seat_001_main",
           "seatNumber": "A1",
           "floor": "Ground Floor",
           "isOccupied": true,
-          "studentId": "student_001",
-          "studentName": "Aarav Sharma"
+          "studentId": "student_001_main",
+          "studentName": "Aarav Sharma (Main)"
         },
-        "seat_002": {
-          "id": "seat_002",
+        "seat_002_main": {
+          "id": "seat_002_main",
           "seatNumber": "A2",
           "floor": "Ground Floor",
           "isOccupied": false,
           "studentId": null,
           "studentName": null
         },
-        "seat_003": {
-          "id": "seat_003",
+        "seat_003_main": {
+          "id": "seat_003_main",
           "seatNumber": "B1",
           "floor": "First Floor",
           "isOccupied": true,
-          "studentId": "student_002",
-          "studentName": "Priya Singh"
-        },
-        "seat_004": {
-          "id": "seat_004",
-          "seatNumber": "B2",
-          "floor": "First Floor",
-          "isOccupied": false,
-          "studentId": null,
-          "studentName": null
-        },
-        "seat_005": {
-          "id": "seat_005",
-          "seatNumber": "C1",
-          "floor": "Second Floor",
-          "isOccupied": true,
-          "studentId": "student_004",
-          "studentName": "Sneha Reddy"
+          "studentId": "student_002_main",
+          "studentName": "Priya Singh (Main)"
         }
       },
       "paymentTypes": {
-        "pt_001": {
-          "id": "pt_001",
-          "name": "Standard Monthly",
+        "pt_001_main": {
+          "id": "pt_001_main",
+          "name": "Standard Monthly (Main)",
           "amount": 6000,
           "frequency": "monthly"
         },
-        "pt_002": {
-          "id": "pt_002",
-          "name": "Quarterly Saver",
+        "pt_002_main": {
+          "id": "pt_002_main",
+          "name": "Quarterly Saver (Main)",
           "amount": 17000,
           "frequency": "quarterly"
         }
       },
       "payments": {
-        "payment_001": {
-          "id": "payment_001",
-          "studentId": "student_001",
-          "studentName": "Aarav Sharma",
+        "payment_001_main": {
+          "id": "payment_001_main",
+          "studentId": "student_001_main",
+          "studentName": "Aarav Sharma (Main)",
           "amount": 6000,
           "paymentDate": "2024-07-05",
-          "notes": "July monthly fee"
+          "notes": "July monthly fee (Main)"
+        }
+      }
+    },
+    "library_branch_a": {
+      "students": {
+        "student_001_branch_a": {
+          "id": "student_001_branch_a",
+          "fullName": "Rohan Mehta (Branch A)",
+          "photoUrl": "https://placehold.co/100x100.png?text=RM",
+          "contactDetails": "rohan.mehta.brancha@example.com",
+          "mobileNumber": "9123456780",
+          "fatherName": "Vikas Mehta",
+          "address": "789 Ocean Drive, Mumbai, Maharashtra 400001",
+          "idProofUrl": null,
+          "notes": "Focusing on commerce, Branch A.",
+          "seatId": "seat_001_branch_a",
+          "status": "enrolled",
+          "feesDue": 0,
+          "lastPaymentDate": "2024-07-01",
+          "enrollmentDate": "2024-03-01",
+          "paymentTypeId": "pt_001_branch_a"
+        }
+      },
+      "seats": {
+         "seat_001_branch_a": {
+          "id": "seat_001_branch_a",
+          "seatNumber": "X1",
+          "floor": "Block X",
+          "isOccupied": true,
+          "studentId": "student_001_branch_a",
+          "studentName": "Rohan Mehta (Branch A)"
         },
-        "payment_002": {
-          "id": "payment_002",
-          "studentId": "student_002",
-          "studentName": "Priya Singh",
-          "amount": 17000,
-          "paymentDate": "2024-06-10",
-          "notes": "Q2 fee payment"
-        },
-        "payment_003": {
-          "id": "payment_003",
-          "studentId": "student_003",
-          "studentName": "Rohan Mehta",
-          "amount": 6000,
+        "seat_002_branch_a": {
+          "id": "seat_002_branch_a",
+          "seatNumber": "X2",
+          "floor": "Block X",
+          "isOccupied": false,
+          "studentId": null,
+          "studentName": null
+        }
+      },
+      "paymentTypes": {
+        "pt_001_branch_a": {
+          "id": "pt_001_branch_a",
+          "name": "Basic Monthly (Branch A)",
+          "amount": 5000,
+          "frequency": "monthly"
+        }
+      },
+      "payments": {
+         "payment_001_branch_a": {
+          "id": "payment_001_branch_a",
+          "studentId": "student_001_branch_a",
+          "studentName": "Rohan Mehta (Branch A)",
+          "amount": 5000,
           "paymentDate": "2024-07-01",
-          "notes": "July monthly fee"
+          "notes": "July fee (Branch A)"
         }
       }
     }

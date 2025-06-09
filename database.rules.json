@@ -1,6 +1,8 @@
 
 {
   "rules": {
+    ".read": false,
+    ".write": false,
     "users_metadata": {
       ".read": "auth != null",
       "$uid": {
@@ -8,7 +10,7 @@
         // Allow superadmin to read/write any user's metadata
         ".read": "$uid === auth.uid || root.child('users_metadata').child(auth.uid).child('role').val() === 'superadmin'",
         ".write": "root.child('users_metadata').child(auth.uid).child('role').val() === 'superadmin'",
-        ".validate": "newData.hasChildren(['id', 'email', 'role']) && newData.child('id').isString() && newData.child('email').isString() && newData.child('role').val() === 'manager' || newData.child('role').val() === 'superadmin'"
+        ".validate": "newData.hasChildren(['id', 'email', 'role']) && newData.child('id').isString() && newData.child('email').isString() && (newData.child('role').val() === 'manager' || newData.child('role').val() === 'superadmin') && (newData.child('role').val() === 'superadmin' || (newData.child('role').val() === 'manager' && newData.hasChild('assignedLibraryId') && newData.child('assignedLibraryId').isString() && newData.hasChild('assignedLibraryName') && newData.child('assignedLibraryName').isString()))"
       }
     },
     "libraries_metadata": {
@@ -54,9 +56,8 @@
         }
       }
     },
-    "config": { // Config node is less critical for data segregation but keep it restricted
+    "config": { 
       "adminPassword": {
-        // This path is no longer used for primary auth, but if kept for other configs, restrict access
         ".read": "auth != null && root.child('users_metadata').child(auth.uid).child('role').val() === 'superadmin'",
         ".write": "auth != null && root.child('users_metadata').child(auth.uid).child('role').val() === 'superadmin'"
       }
