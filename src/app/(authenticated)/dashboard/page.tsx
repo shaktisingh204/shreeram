@@ -3,9 +3,9 @@
 
 import { useEffect, useState } from 'react';
 import { DashboardCard } from '@/components/DashboardCard';
-import { getDashboardSummary, getUsersMetadata } from '@/lib/data'; // Added getUsersMetadata
-import type { DashboardSummary, UserMetadata } from '@/types'; // Added UserMetadata
-import { Users, Armchair, TrendingUp, AlertTriangle, DollarSign, Loader2, LogIn, Library as LibraryIcon } from 'lucide-react';
+import { getDashboardSummary, getUsersMetadata } from '@/lib/data';
+import type { DashboardSummary, UserMetadata } from '@/types';
+import { Users, Armchair, TrendingUp, AlertTriangle, DollarSign, Loader2, LogIn, Library as LibraryIcon, EyeOff } from 'lucide-react'; // Added EyeOff
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAuth } from '@/context/AuthContext';
@@ -25,12 +25,26 @@ const sampleMonthlyData = [
 
 
 export default function DashboardPage() {
-  const { user, userMetadata, currentLibraryId, currentLibraryName, loading: authLoading, isSuperAdmin, switchLibraryContext } = useAuth();
+  const { 
+    user, 
+    userMetadata, 
+    currentLibraryId, 
+    currentLibraryName, 
+    loading: authLoading, 
+    isSuperAdmin, 
+    isManager, // Added for clarity
+    switchLibraryContext, 
+    allLibraries, 
+    isImpersonating, 
+    revertToSuperAdminView 
+  } = useAuth();
   const router = useRouter();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [managers, setManagers] = useState<UserMetadata[]>([]); // For superadmin to list managers
+  const [managers, setManagers] = useState<UserMetadata[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [loadingManagers, setLoadingManagers] = useState(false);
+
+  const pageTitle = currentLibraryName || (isSuperAdmin && !currentLibraryId ? "All Libraries Overview" : "Overview");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -40,26 +54,23 @@ export default function DashboardPage() {
         return;
       }
 
-      if (!currentLibraryId && user) { // User authenticated, but no library context yet (could be superadmin without a selection)
-         if (isSuperAdmin && userMetadata?.assignedLibraryId) {
-            // Superadmin might have an assigned default, try to load that first
-            // but actual selection happens in header. Data fetching for summary should wait for currentLibraryId
-         } else {
-            setLoadingData(false); 
-            if (isSuperAdmin) setLoadingManagers(false);
-            return;
-         }
-      }
-      
+      // Determine library ID for summary fetching
+      // For superadmin, if currentLibraryId is null, it means "All Libraries" view
+      const libraryIdForSummary = isSuperAdmin && currentLibraryId === null ? null : currentLibraryId;
+
       setLoadingData(true); 
       try {
-        if (currentLibraryId) { // Only fetch summary if a library context is set
-          const data = await getDashboardSummary(currentLibraryId);
-          setSummary(data);
-        } else if (!isSuperAdmin) { // Manager without library context is an error
+        if (libraryIdForSummary !== undefined) { // Fetch if context is set (null is valid for SA all libs) or if manager has a lib
+           if (isManager && !libraryIdForSummary) { // Manager must have a library context
+             setSummary(null); // Or show an error specific to manager config
+           } else {
+            const data = await getDashboardSummary(libraryIdForSummary);
+            setSummary(data);
+           }
+        } else if (isManager) { // Manager has no library context (error state)
             setSummary(null);
         }
-        // If superadmin and no currentLibraryId, summary remains null, but manager list can load
+        // If superadmin and no libraries exist (libraryIdForSummary might be null, and summary might be from getDashboardSummary(null))
       } catch (error) {
         console.error("Failed to fetch dashboard summary:", error);
         setSummary(null); 
@@ -81,20 +92,23 @@ export default function DashboardPage() {
       }
     };
     fetchData();
-  }, [currentLibraryId, authLoading, isSuperAdmin, user, userMetadata]);
+  }, [currentLibraryId, authLoading, isSuperAdmin, isManager, user, userMetadata]); // Added isManager
 
   const handleImpersonateManager = async (manager: UserMetadata) => {
     if (!isSuperAdmin || !manager.assignedLibraryId) return;
     try {
       await switchLibraryContext(manager.assignedLibraryId);
-      // router.push('/dashboard'); // No need to push, useEffect on currentLibraryId will re-fetch
     } catch (error) {
       console.error("Failed to switch context for manager impersonation:", error);
     }
   };
 
+  const handleRevertToSuperAdminView = async () => {
+    await revertToSuperAdminView();
+  };
 
-  if (authLoading || loadingData || (isSuperAdmin && loadingManagers)) {
+
+  if (authLoading || loadingData || (isSuperAdmin && loadingManagers && !isImpersonating)) { // Don't block for manager loading if impersonating
     return (
       <div className="flex justify-center items-center h-full">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -102,7 +116,8 @@ export default function DashboardPage() {
     );
   }
   
-  if (!currentLibraryId && user && !isSuperAdmin) { // Manager is authenticated, but no library context (config error)
+  // Specific state for manager without library context
+  if (isManager && !currentLibraryId && user) {
      return (
       <div className="flex flex-col justify-center items-center h-full text-center p-4">
         <AlertTriangle className="h-16 w-16 text-destructive mb-4" />
@@ -117,46 +132,75 @@ export default function DashboardPage() {
     );
   }
   
-  // Superadmin view when no library is selected (e.g. first load, or no libraries exist)
-  if (isSuperAdmin && !currentLibraryId) {
+  // Superadmin view when no library is selected (e.g. first load, or explicitly reverted to "All Libraries")
+  // AND no libraries exist at all in the system.
+  if (isSuperAdmin && currentLibraryId === null && !isImpersonating && allLibraries.length === 0) {
      return (
       <div className="space-y-6">
         <h1 className="text-3xl font-headline font-bold text-primary">Dashboard (Superadmin Overview)</h1>
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle className="font-headline text-primary">Select a Library Context</CardTitle>
-            <CardDescription>Please select a library from the header dropdown to view its specific dashboard. Below you can quickly switch to a manager's library context.</CardDescription>
+            <CardTitle className="font-headline text-primary">No Libraries Found</CardTitle>
+            <CardDescription>Please create a library first to see dashboard data or manage contexts.</CardDescription>
           </CardHeader>
+          <CardContent>
+            <Button onClick={() => router.push('/manage-libraries')}>Manage Libraries</Button>
+          </CardContent>
         </Card>
-        {isSuperAdmin && (
-          <ManagerContextSwitcherCard managers={managers} onImpersonate={handleImpersonateManager} isLoading={loadingManagers} />
-        )}
+        {/* Manager context switcher might be empty but can still be shown structurally */}
+        <ManagerContextSwitcherCard managers={managers} onImpersonate={handleImpersonateManager} isLoading={loadingManagers} />
       </div>
     )
   }
+  
+  // Superadmin initial view or when "All Libraries" is selected (currentLibraryId is null), but libraries *do* exist
+  // Or when impersonating any library. The summary will be for "All Libraries" or the impersonated one.
+  // The key difference from above is that `summary` should be available for "All Libraries" if libs exist.
+  if (isSuperAdmin && currentLibraryId === null && !isImpersonating && allLibraries.length > 0 && !summary) {
+      // This case means "All Libraries" summary is still loading or failed, show loader/error
+      // If summary is null, but we expect "All Libraries" data
+      return (
+          <div className="flex justify-center items-center h-full">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <p className="ml-4">Loading All Libraries Overview...</p>
+          </div>
+      );
+  }
 
-  if (!summary && currentLibraryId) { // Library context exists, but failed to fetch summary
+
+  if (!summary && (currentLibraryId || (isSuperAdmin && currentLibraryId === null))) { 
+     // This covers:
+     // 1. Manager with a library context, but summary failed.
+     // 2. Superadmin impersonating a library, but summary failed.
+     // 3. Superadmin on "All Libraries" view (currentLibraryId is null), but summary failed.
      return (
       <div className="flex flex-col justify-center items-center h-full text-center">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
-        <p className="text-xl font-semibold">Could not load dashboard data for {currentLibraryName}.</p>
-        <p className="text-muted-foreground">Please try refreshing, or check if the library has data.</p>
+        <p className="text-xl font-semibold">Could not load dashboard data for {pageTitle}.</p>
+        <p className="text-muted-foreground">Please try refreshing, or check if data exists.</p>
       </div>
     );
   }
   
-  if (!summary) { // Catch-all if summary is null for any other reason after loading (e.g. manager has no lib)
+  if (!summary) { // Final catch-all if summary is null after loading.
       return (
         <div className="flex justify-center items-center h-full">
-           <p className="text-muted-foreground">No dashboard data to display.</p>
+           <p className="text-muted-foreground">No dashboard data to display for {pageTitle}.</p>
         </div>
       )
   }
 
-
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-headline font-bold text-primary">Dashboard ({summary.libraryName || currentLibraryName || 'Overview'})</h1>
+      {isSuperAdmin && isImpersonating && (
+        <div className="mb-6 text-center sm:text-left">
+          <Button onClick={handleRevertToSuperAdminView} variant="outline" className="w-full sm:w-auto">
+            <EyeOff className="mr-2 h-4 w-4" /> Revert to All Libraries View
+          </Button>
+        </div>
+      )}
+
+      <h1 className="text-3xl font-headline font-bold text-primary">Dashboard ({pageTitle})</h1>
       
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <DashboardCard
@@ -193,7 +237,11 @@ export default function DashboardPage() {
         <Card className="shadow-lg lg:col-span-2">
           <CardHeader>
             <CardTitle className="font-headline text-primary">Monthly Overview</CardTitle>
-            <CardDescription>Earnings and spending trend for {summary.libraryName || currentLibraryName}.</CardDescription>
+            <CardDescription>
+              {isSuperAdmin && currentLibraryId === null && !isImpersonating 
+                ? "Sample trend data shown. Aggregated financial data across all libraries is complex and not shown here." 
+                : `Earnings and spending trend for ${summary.libraryName || pageTitle}.`}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
@@ -216,7 +264,7 @@ export default function DashboardPage() {
         
         {isSuperAdmin ? (
            <ManagerContextSwitcherCard managers={managers} onImpersonate={handleImpersonateManager} isLoading={loadingManagers} />
-        ) : (
+        ) : ( // This branch is for Managers
             <Card className="shadow-lg">
             <CardHeader>
                 <CardTitle className="font-headline text-primary">Fees Due</CardTitle>
@@ -239,34 +287,6 @@ export default function DashboardPage() {
             </Card>
         )}
       </div>
-      {/* If not super admin, show the fees due card in its original place (if lg:grid-cols-2 was used) */}
-       {!isSuperAdmin && (
-         <div className="grid gap-6 md:grid-cols-2">
-            <div></div> {/* Empty div to occupy space of the barchart if needed for layout consistency, or remove if Monthly Overview takes full width */}
-            <Card className="shadow-lg">
-                <CardHeader>
-                    <CardTitle className="font-headline text-primary">Fees Due</CardTitle>
-                    <CardDescription>Students with payments to be made.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex items-center justify-center p-8">
-                    <AlertTriangle className="h-16 w-16 text-destructive mr-4" />
-                    <div>
-                        <p className="text-4xl font-bold text-destructive">{summary.studentsWithDues}</p>
-                        <p className="text-muted-foreground">Students need to pay</p>
-                    </div>
-                    </div>
-                    <div className="mt-4 text-center">
-                        <DollarSign className="h-10 w-10 text-green-500 inline-block" />
-                        <p className="text-xl font-semibold text-green-600">All fees collected for today!</p>
-                        <p className="text-sm text-muted-foreground">This is a placeholder. Real logic for fees due today vs collected to be implemented.</p>
-                    </div>
-                </CardContent>
-            </Card>
-         </div>
-       )}
-
-
     </div>
   );
 }
@@ -294,11 +314,11 @@ function ManagerContextSwitcherCard({ managers, onImpersonate, isLoading }: Mana
           <ScrollArea className="h-[250px]">
             <ul className="space-y-3">
               {managers.map(manager => (
-                <li key={manager.id} className="flex items-center justify-between p-2 border rounded-md hover:bg-muted/50">
+                <li key={manager.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors shadow-sm">
                   <div>
-                    <p className="font-medium">{manager.displayName}</p>
-                    <p className="text-sm text-muted-foreground flex items-center">
-                      <LibraryIcon className="h-3 w-3 mr-1.5 text-accent"/>
+                    <p className="font-semibold text-foreground">{manager.displayName}</p>
+                    <p className="text-sm text-muted-foreground flex items-center mt-0.5">
+                      <LibraryIcon className="h-3.5 w-3.5 mr-1.5 text-accent"/>
                       {manager.assignedLibraryName || "N/A"}
                     </p>
                   </div>
@@ -308,8 +328,9 @@ function ManagerContextSwitcherCard({ managers, onImpersonate, isLoading }: Mana
                       size="sm" 
                       onClick={() => onImpersonate(manager)}
                       title={`View as ${manager.displayName}`}
+                      className="px-3 py-1.5"
                     >
-                      <LogIn className="mr-2 h-4 w-4 text-accent" /> View
+                      <LogIn className="mr-1.5 h-4 w-4 text-accent" /> View
                     </Button>
                   )}
                 </li>
@@ -317,9 +338,10 @@ function ManagerContextSwitcherCard({ managers, onImpersonate, isLoading }: Mana
             </ul>
           </ScrollArea>
         ) : (
-          <p className="text-muted-foreground text-center py-8">No managers found.</p>
+          <p className="text-muted-foreground text-center py-8">No managers found to display.</p>
         )}
       </CardContent>
     </Card>
   );
 }
+
