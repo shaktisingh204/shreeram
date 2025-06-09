@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,24 +25,26 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getSeats, getFeePlans } from "@/lib/data";
 
+const NONE_SELECT_VALUE = "__NONE_PLACEHOLDER__"; // Special value for no selection
+
 const studentFormSchema = z.object({
   fullName: z.string().min(2, { message: "Full name must be at least 2 characters." }).max(100),
   contactDetails: z.string().email({ message: "Invalid email address." }),
   photoUrl: z.string().url({ message: "Invalid URL for photo." }).optional().or(z.literal('')),
   idProofUrl: z.string().url({ message: "Invalid URL for ID proof." }).optional().or(z.literal('')),
   notes: z.string().max(500).optional(),
-  seatId: z.string().optional().or(z.literal('')), // Changed from seatNumber to seatId
+  seatId: z.string(), // Will hold actual seat ID or NONE_SELECT_VALUE
   status: z.enum(["enrolled", "owing", "inactive"]),
   feesDue: z.coerce.number().min(0, { message: "Fees due cannot be negative." }),
   enrollmentDate: z.string().refine((date) => !isNaN(Date.parse(date)), { message: "Invalid date format." }),
-  feePlanId: z.string().optional().or(z.literal('')),
+  feePlanId: z.string(), // Will hold actual fee plan ID or NONE_SELECT_VALUE
 });
 
 export type StudentFormValues = z.infer<typeof studentFormSchema>;
 
 interface StudentFormProps {
   initialData?: Student;
-  onSubmit: (values: StudentFormValues) => Promise<void>;
+  onSubmit: (values: Omit<StudentFormValues, 'seatId' | 'feePlanId'> & { seatId?: string; feePlanId?: string }) => Promise<void>;
   isSubmitting: boolean;
 }
 
@@ -54,7 +57,6 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
   useEffect(() => {
     async function fetchData() {
       const seatsData = await getSeats();
-      // Filter for available seats OR the student's current seat if editing
       const currentSeatId = initialData?.seatId;
       setAvailableSeats(seatsData.filter(seat => !seat.isOccupied || seat.id === currentSeatId));
       
@@ -70,31 +72,33 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
       ...initialData,
       feesDue: initialData.feesDue || 0,
       enrollmentDate: initialData.enrollmentDate || new Date().toISOString().split('T')[0],
-      seatId: initialData.seatId || "", // Ensure seatId is correctly mapped
-      feePlanId: initialData.feePlanId || "",
+      seatId: initialData.seatId || NONE_SELECT_VALUE, 
+      feePlanId: initialData.feePlanId || NONE_SELECT_VALUE,
+      photoUrl: initialData.photoUrl || "",
+      idProofUrl: initialData.idProofUrl || "",
+      notes: initialData.notes || "",
     } : {
       fullName: "",
       contactDetails: "",
       photoUrl: "",
       idProofUrl: "",
       notes: "",
-      seatId: "", // Default to empty string for no seat
+      seatId: NONE_SELECT_VALUE,
       status: "enrolled",
       feesDue: 0,
       enrollmentDate: new Date().toISOString().split('T')[0],
-      feePlanId: "",
+      feePlanId: NONE_SELECT_VALUE,
     },
   });
 
   const handleFormSubmit = async (values: StudentFormValues) => {
     try {
-      // Ensure empty string seatId is converted to undefined if your backend expects that for "no seat"
       const submissionValues = {
         ...values,
-        seatId: values.seatId === "" ? undefined : values.seatId,
-        feePlanId: values.feePlanId === "" ? undefined : values.feePlanId,
+        seatId: values.seatId === NONE_SELECT_VALUE ? undefined : values.seatId,
+        feePlanId: values.feePlanId === NONE_SELECT_VALUE ? undefined : values.feePlanId,
       };
-      await onSubmit(submissionValues as StudentFormValues); // Cast if necessary after modification
+      await onSubmit(submissionValues);
     } catch (error) {
       toast({
         title: "Error",
@@ -190,14 +194,14 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Assign Seat (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a seat" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">No Seat</SelectItem>
+                        <SelectItem value={NONE_SELECT_VALUE}>No Seat</SelectItem>
                         {availableSeats.map(seat => (
                           <SelectItem key={seat.id} value={seat.id}>
                             {seat.seatNumber} ({seat.floor})
@@ -252,14 +256,14 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Fee Plan (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a fee plan" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">No Plan</SelectItem>
+                        <SelectItem value={NONE_SELECT_VALUE}>No Plan</SelectItem>
                         {feePlans.map(plan => (
                           <SelectItem key={plan.id} value={plan.id}>
                             {plan.name} (${plan.amount}/{plan.frequency})
@@ -300,3 +304,5 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
     </Card>
   );
 }
+
+    
