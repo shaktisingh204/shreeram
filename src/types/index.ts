@@ -1,3 +1,4 @@
+
 export interface Student {
   id: string;
   fullName: string;
@@ -5,21 +6,21 @@ export interface Student {
   contactDetails: string;
   idProofUrl?: string;
   notes?: string;
-  seatId?: string; // Changed from seatNumber
-  status: 'enrolled' | 'owing' | 'inactive';
-  feesDue: number;
+  seatId?: string; 
+  status: 'enrolled' | 'owing' | 'inactive'; // 'enrolled' can mean 'active'
+  feesDue: number; // Amount to pay
   lastPaymentDate?: string;
-  enrollmentDate: string;
-  feePlanId?: string;
+  enrollmentDate: string; // Joined On
+  paymentTypeId?: string; // Renamed from feePlanId
 }
 
 export interface Seat {
   id: string;
   seatNumber: string;
-  floor: string; // Added floor
+  floor: string; 
   isOccupied: boolean;
   studentId?: string;
-  studentName?: string; // Kept for convenience, can be derived
+  studentName?: string; 
 }
 
 export interface FeePayment {
@@ -31,18 +32,17 @@ export interface FeePayment {
   notes?: string;
 }
 
-export interface FeePlan {
+export interface PaymentType { // Renamed from FeePlan
   id: string;
   name: string;
   amount: number;
-  frequency: 'monthly' | 'quarterly' | 'annually';
+  frequency: 'monthly' | 'quarterly' | 'annually'; // Payment Cycle
 }
 
-// For dashboard summary
 export interface DashboardSummary {
   totalStudents: number;
   totalSeats: number;
   availableSeats: number;
-  monthlyIncome: number;
-  feesDueToday: number;
+  monthlyIncome: number; // Monthly Earnings
+  studentsWithDues: number; // Renamed from feesDueToday
 }

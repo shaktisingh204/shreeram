@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -9,13 +10,13 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 const sampleMonthlyData = [
-  { name: 'Jan', income: 4000, expenses: 2400 },
-  { name: 'Feb', income: 3000, expenses: 1398 },
-  { name: 'Mar', income: 5000, expenses: 3800 },
-  { name: 'Apr', income: 4780, expenses: 2908 },
-  { name: 'May', income: 5890, expenses: 4800 },
-  { name: 'Jun', income: 4390, expenses: 3800 },
-  { name: 'Jul', income: 5490, expenses: 4300 },
+  { name: 'Jan', income: 40000, expenses: 24000 },
+  { name: 'Feb', income: 30000, expenses: 13980 },
+  { name: 'Mar', income: 50000, expenses: 38000 },
+  { name: 'Apr', income: 47800, expenses: 29080 },
+  { name: 'May', income: 58900, expenses: 48000 },
+  { name: 'Jun', income: 43900, expenses: 38000 },
+  { name: 'Jul', income: 54900, expenses: 43000 },
 ];
 
 
@@ -68,10 +69,10 @@ export default function DashboardPage() {
           className={summary.availableSeats < summary.totalSeats * 0.1 ? "border-destructive" : "bg-card"}
         />
         <DashboardCard
-          title="Monthly Income"
-          value={`$${summary.monthlyIncome.toLocaleString()}`}
+          title="Monthly Earnings"
+          value={`₹${summary.monthlyIncome.toLocaleString()}`}
           icon={TrendingUp}
-          description="Income this month"
+          description="Earnings this month"
           className="bg-card"
         />
       </div>
@@ -80,7 +81,7 @@ export default function DashboardPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="font-headline text-primary">Monthly Overview</CardTitle>
-            <CardDescription>Income and expenses trend.</CardDescription>
+            <CardDescription>Earnings and spending trend.</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
@@ -91,9 +92,10 @@ export default function DashboardPage() {
                 <Tooltip
                   contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))' }}
                   labelStyle={{ color: 'hsl(var(--foreground))' }}
+                  formatter={(value: number) => `₹${value.toLocaleString()}`}
                 />
                 <Legend wrapperStyle={{ color: 'hsl(var(--foreground))' }}/>
-                <Bar dataKey="income" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Income"/>
+                <Bar dataKey="income" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Earnings"/>
                 <Bar dataKey="expenses" fill="hsl(var(--accent))" radius={[4, 4, 0, 0]} name="Expenses"/>
               </BarChart>
             </ResponsiveContainer>
@@ -103,14 +105,14 @@ export default function DashboardPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="font-headline text-primary">Fees Due</CardTitle>
-            <CardDescription>Students with outstanding payments.</CardDescription>
+            <CardDescription>Students with payments to be made.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-center p-8">
               <AlertTriangle className="h-16 w-16 text-destructive mr-4" />
               <div>
-                <p className="text-4xl font-bold text-destructive">{summary.feesDueToday}</p>
-                <p className="text-muted-foreground">Students owe fees</p>
+                <p className="text-4xl font-bold text-destructive">{summary.studentsWithDues}</p>
+                <p className="text-muted-foreground">Students need to pay</p>
               </div>
             </div>
              <div className="mt-4 text-center">

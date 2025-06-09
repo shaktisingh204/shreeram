@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
@@ -7,8 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { getStudents, getSeats } from '@/lib/data'; // Added getSeats
-import type { Student, Seat } from '@/types'; // Added Seat
+import { getStudents, getSeats } from '@/lib/data'; 
+import type { Student, Seat } from '@/types'; 
 import { PlusCircle, Search, Edit, Eye, Trash2, Loader2, MoreHorizontal } from 'lucide-react';
 import {
   DropdownMenu,
@@ -26,7 +27,7 @@ import {
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
-  const [seats, setSeats] = useState<Seat[]>([]); // Added state for seats
+  const [seats, setSeats] = useState<Seat[]>([]); 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
@@ -35,9 +36,9 @@ export default function StudentsPage() {
     const fetchData = async () => {
       setLoading(true);
       const studentData = await getStudents();
-      const seatData = await getSeats(); // Fetch seats
+      const seatData = await getSeats(); 
       setStudents(studentData);
-      setSeats(seatData); // Store seats
+      setSeats(seatData); 
       setLoading(false);
     };
     fetchData();
@@ -63,6 +64,20 @@ export default function StudentsPage() {
         return 'outline';
     }
   };
+  
+  const getStatusBadgeText = (status: Student['status']) => {
+    switch (status) {
+      case 'enrolled':
+        return 'Active'; 
+      case 'owing':
+        return 'Has Dues';
+      case 'inactive':
+        return 'Inactive';
+      default:
+        return status;
+    }
+  };
+
 
   const getStudentSeatDisplay = (studentSeatId?: string) => {
     if (!studentSeatId) return 'N/A';
@@ -81,7 +96,7 @@ export default function StudentsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <h1 className="text-3xl font-headline font-bold text-primary">Students</h1>
+        <h1 className="text-3xl font-headline font-bold text-primary">Student List</h1>
         <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
           <div className="relative w-full sm:w-auto">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -95,12 +110,12 @@ export default function StudentsPage() {
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-full sm:w-[180px]">
-              <SelectValue placeholder="Filter by status" />
+              <SelectValue placeholder="Show by status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="enrolled">Enrolled</SelectItem>
-              <SelectItem value="owing">Owing</SelectItem>
+              <SelectItem value="all">All Students</SelectItem>
+              <SelectItem value="enrolled">Active</SelectItem>
+              <SelectItem value="owing">Has Dues</SelectItem>
               <SelectItem value="inactive">Inactive</SelectItem>
             </SelectContent>
           </Select>
@@ -122,7 +137,7 @@ export default function StudentsPage() {
                 <TableHead>Contact</TableHead>
                 <TableHead>Seat</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Fees Due</TableHead>
+                <TableHead>Amount to Pay</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -140,10 +155,10 @@ export default function StudentsPage() {
                   <TableCell>{getStudentSeatDisplay(student.seatId)}</TableCell>
                   <TableCell>
                     <Badge variant={getStatusBadgeVariant(student.status)} className="capitalize">
-                      {student.status}
+                      {getStatusBadgeText(student.status)}
                     </Badge>
                   </TableCell>
-                  <TableCell>${student.feesDue.toFixed(2)}</TableCell>
+                  <TableCell>₹{student.feesDue.toFixed(2)}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

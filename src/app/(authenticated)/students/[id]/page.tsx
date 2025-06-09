@@ -1,8 +1,9 @@
+
 "use client";
 
 import { useEffect, useState } from 'react';
-import { getStudentById, getPayments, getFeePlanById, getSeatById } from '@/lib/data'; 
-import type { Student, FeePayment, FeePlan, Seat } from '@/types';
+import { getStudentById, getPayments, getPaymentTypeById, getSeatById } from '@/lib/data'; 
+import type { Student, FeePayment, PaymentType, Seat } from '@/types';
 import { useParams, useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -21,7 +22,7 @@ export default function StudentDetailPage() {
   const [student, setStudent] = useState<Student | null>(null);
   const [assignedSeat, setAssignedSeat] = useState<Seat | null>(null);
   const [payments, setPayments] = useState<FeePayment[]>([]);
-  const [feePlan, setFeePlan] = useState<FeePlan | null>(null);
+  const [paymentType, setPaymentType] = useState<PaymentType | null>(null); // Renamed from feePlan
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -46,9 +47,9 @@ export default function StudentDetailPage() {
           const paymentData = await getPayments(); 
           setPayments(paymentData.filter(p => p.studentId === studentId));
 
-          if (studentData.feePlanId) {
-            const planData = await getFeePlanById(studentData.feePlanId);
-            if (planData) setFeePlan(planData);
+          if (studentData.paymentTypeId) { // Renamed from feePlanId
+            const planData = await getPaymentTypeById(studentData.paymentTypeId); // Renamed function
+            if (planData) setPaymentType(planData); // Renamed state setter
           }
 
         } catch (error) {
@@ -64,8 +65,8 @@ export default function StudentDetailPage() {
   const getStatusBadgeVariant = (status: Student['status'] | undefined) => {
     if (!status) return 'outline';
     switch (status) {
-      case 'enrolled': return 'default';
-      case 'owing': return 'destructive';
+      case 'enrolled': return 'default'; // 'active' could be an alternative if desired
+      case 'owing': return 'destructive'; // 'hasDues' could be an alternative
       case 'inactive': return 'secondary';
       default: return 'outline';
     }
@@ -87,9 +88,9 @@ export default function StudentDetailPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <Button variant="outline" onClick={() => router.back()} className="flex items-center">
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Students
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Student List
         </Button>
-        <Link href={`/students/edit/${student.id}`} passHref legacyBehavior>
+        <Link href={`/students/edit/${student.id}`} passHref>
           <Button>
             <Edit className="mr-2 h-4 w-4" /> Edit Student
           </Button>
@@ -105,23 +106,23 @@ export default function StudentDetailPage() {
           <div className="flex-1">
             <CardTitle className="text-3xl font-headline text-primary">{student.fullName}</CardTitle>
             <Badge variant={getStatusBadgeVariant(student.status)} className="capitalize mt-1 text-sm">
-              {student.status}
+              {student.status === 'owing' ? 'Has Dues' : student.status}
             </Badge>
           </div>
         </CardHeader>
         <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-foreground border-b pb-2 mb-2">Personal Information</h3>
+            <h3 className="text-lg font-semibold text-foreground border-b pb-2 mb-2">Student Details</h3>
             <InfoItem icon={Mail} label="Contact Email" value={student.contactDetails} />
-            <InfoItem icon={CalendarDays} label="Enrollment Date" value={new Date(student.enrollmentDate).toLocaleDateString()} />
+            <InfoItem icon={CalendarDays} label="Joined On" value={new Date(student.enrollmentDate).toLocaleDateString()} />
             {assignedSeat && <InfoItem icon={Armchair} label="Assigned Seat" value={`${assignedSeat.seatNumber} (Floor: ${assignedSeat.floor})`} />}
             {student.notes && <InfoItem icon={StickyNote} label="Notes" value={student.notes} />}
           </div>
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-foreground border-b pb-2 mb-2">Financial Information</h3>
-            <InfoItem icon={DollarSign} label="Fees Due" value={`$${student.feesDue.toFixed(2)}`} className={student.feesDue > 0 ? "text-destructive font-bold" : ""} />
+            <h3 className="text-lg font-semibold text-foreground border-b pb-2 mb-2">Fee Details</h3>
+            <InfoItem icon={DollarSign} label="Amount to Pay" value={`₹${student.feesDue.toFixed(2)}`} className={student.feesDue > 0 ? "text-destructive font-bold" : ""} />
             {student.lastPaymentDate && <InfoItem icon={CalendarDays} label="Last Payment" value={new Date(student.lastPaymentDate).toLocaleDateString()} />}
-            {feePlan && <InfoItem icon={Briefcase} label="Fee Plan" value={`${feePlan.name} ($${feePlan.amount}/${feePlan.frequency})`} />}
+            {paymentType && <InfoItem icon={Briefcase} label="Payment Type" value={`${paymentType.name} (₹${paymentType.amount}/${paymentType.frequency})`} />}
           </div>
            {student.idProofUrl && (
             <div className="md:col-span-2 space-y-2">
@@ -138,7 +139,7 @@ export default function StudentDetailPage() {
         <Card className="shadow-xl">
           <CardHeader>
             <CardTitle className="font-headline text-xl text-primary">Payment History</CardTitle>
-            <CardDescription>Record of payments made by this student.</CardDescription>
+            <CardDescription>List of payments made by this student.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto rounded-md border">
@@ -154,7 +155,7 @@ export default function StudentDetailPage() {
                   {payments.map((payment) => (
                     <TableRow key={payment.id}>
                       <TableCell>{new Date(payment.paymentDate).toLocaleDateString()}</TableCell>
-                      <TableCell>${payment.amount.toFixed(2)}</TableCell>
+                      <TableCell>₹{payment.amount.toFixed(2)}</TableCell>
                       <TableCell>{payment.notes || 'N/A'}</TableCell>
                     </TableRow>
                   ))}

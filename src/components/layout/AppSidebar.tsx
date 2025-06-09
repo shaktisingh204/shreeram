@@ -11,9 +11,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarMenuBadge,
 } from '@/components/ui/sidebar';
-import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 import {
   LayoutDashboard,
@@ -26,15 +24,14 @@ import {
   Settings,
   BookOpenCheck,
 } from 'lucide-react';
-import Image from 'next/image';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/students', label: 'Students', icon: Users },
-  { href: '/seats', label: 'Seats', icon: Armchair },
-  { href: '/fees', label: 'Fees', icon: DollarSign },
-  { href: '/reports', label: 'Reports', icon: FileText },
-  { href: '/fee-plans', label: 'Fee Plans', icon: ListChecks },
+  { href: '/seats', label: 'Seat Setup', icon: Armchair }, // Updated label
+  { href: '/fees', label: 'Fee Collection', icon: DollarSign }, // Updated label
+  { href: '/reports', label: 'Statements', icon: FileText }, // Updated label
+  { href: '/fee-plans', label: 'Payment Types', icon: ListChecks }, // Updated label
 ];
 
 export function AppSidebar() {

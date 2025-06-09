@@ -2,8 +2,8 @@
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
-import { getStudents, getPayments, addPayment, markFeesAsPaid as markFeesAsPaidAction, getFeePlans } from '@/lib/data';
-import type { Student, FeePayment, FeePlan } from '@/types';
+import { getStudents, getPayments, addPayment, markFeesAsPaid as markFeesAsPaidAction, getPaymentTypes } from '@/lib/data';
+import type { Student, FeePayment, PaymentType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -44,10 +44,10 @@ interface PaymentFormData {
   notes?: string;
 }
 
-export default function FeesPage() {
+export default function FeeCollectionPage() { // Renamed component
   const [students, setStudents] = useState<Student[]>([]);
   const [payments, setPayments] = useState<FeePayment[]>([]);
-  const [feePlans, setFeePlans] = useState<FeePlan[]>([]);
+  const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]); // Renamed state
   const [loading, setLoading] = useState(true);
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
@@ -61,7 +61,7 @@ export default function FeesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'owing', 'paid'
+  const [statusFilter, setStatusFilter] = useState('all'); 
 
 
   const fetchData = async () => {
@@ -69,10 +69,10 @@ export default function FeesPage() {
     try {
       const studentData = await getStudents();
       const paymentData = await getPayments();
-      const feePlanData = await getFeePlans();
+      const paymentTypeData = await getPaymentTypes(); // Renamed function
       setStudents(studentData);
       setPayments(paymentData);
-      setFeePlans(feePlanData);
+      setPaymentTypes(paymentTypeData);
     } catch (error) {
       toast({ title: "Error", description: "Failed to fetch data.", variant: "destructive" });
     } finally {
@@ -88,8 +88,8 @@ export default function FeesPage() {
     return students.filter(student => {
       const nameMatch = student.fullName.toLowerCase().includes(searchTerm.toLowerCase());
       let statusMatch = true;
-      if (statusFilter === 'owing') statusMatch = student.feesDue > 0 && student.status !== 'inactive';
-      else if (statusFilter === 'paid') statusMatch = student.feesDue === 0 && student.status === 'enrolled';
+      if (statusFilter === 'hasDues') statusMatch = student.feesDue > 0 && student.status !== 'inactive'; // Renamed filter value
+      else if (statusFilter === 'allPaid') statusMatch = student.feesDue === 0 && student.status === 'enrolled'; // Renamed filter value
       else if (statusFilter === 'inactive') statusMatch = student.status === 'inactive';
       
       return nameMatch && statusMatch;
@@ -99,10 +99,10 @@ export default function FeesPage() {
 
   const openPaymentDialog = (student: Student) => {
     setCurrentStudent(student);
-    const studentFeePlan = feePlans.find(fp => fp.id === student.feePlanId);
+    const studentPaymentType = paymentTypes.find(fp => fp.id === student.paymentTypeId); // Renamed variable
     setPaymentFormData({
       studentId: student.id,
-      amount: student.feesDue > 0 ? student.feesDue : (studentFeePlan?.amount || 0),
+      amount: student.feesDue > 0 ? student.feesDue : (studentPaymentType?.amount || 0),
       paymentDate: new Date().toISOString().split('T')[0],
       notes: '',
     });
@@ -121,12 +121,12 @@ export default function FeesPage() {
     try {
       await addPayment({
         studentId: currentStudent.id,
-        amount: Number(paymentFormData.amount), // ensure it's a number
+        amount: Number(paymentFormData.amount), 
         paymentDate: paymentFormData.paymentDate,
         notes: paymentFormData.notes,
       });
       toast({ title: "Success", description: "Payment added successfully." });
-      await fetchData(); // Refresh data
+      await fetchData(); 
       setIsPaymentDialogOpen(false);
     } catch (error) {
       toast({ title: "Error", description: "Failed to add payment.", variant: "destructive" });
@@ -139,10 +139,10 @@ export default function FeesPage() {
     setIsSubmitting(true);
     try {
       await markFeesAsPaidAction(studentId);
-      toast({ title: "Success", description: "Fees marked as paid." });
-      await fetchData(); // Refresh data
+      toast({ title: "Success", description: "Dues cleared." });
+      await fetchData(); 
     } catch (error) {
-      toast({ title: "Error", description: "Failed to mark fees as paid.", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to clear dues.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -153,9 +153,9 @@ export default function FeesPage() {
     return payments.filter(p => p.studentId === currentStudent.id).sort((a,b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime());
   };
   
-  const getStudentFeePlanName = (student: Student) => {
-    const plan = feePlans.find(fp => fp.id === student.feePlanId);
-    return plan ? `${plan.name} ($${plan.amount})` : 'No Plan';
+  const getStudentPaymentTypeName = (student: Student) => { // Renamed function
+    const plan = paymentTypes.find(fp => fp.id === student.paymentTypeId);
+    return plan ? `${plan.name} (₹${plan.amount})` : 'No Plan';
   };
 
   if (loading) {
@@ -169,7 +169,7 @@ export default function FeesPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <h1 className="text-3xl font-headline font-bold text-primary">Fees Management</h1>
+        <h1 className="text-3xl font-headline font-bold text-primary">Fee Collection</h1>
         <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
           <div className="relative w-full sm:w-auto">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -187,8 +187,8 @@ export default function FeesPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Students</SelectItem>
-              <SelectItem value="owing">Owing Fees</SelectItem>
-              <SelectItem value="paid">Fully Paid</SelectItem>
+              <SelectItem value="hasDues">Has Dues</SelectItem>
+              <SelectItem value="allPaid">All Paid</SelectItem>
               <SelectItem value="inactive">Inactive</SelectItem>
             </SelectContent>
           </Select>
@@ -198,7 +198,7 @@ export default function FeesPage() {
       <Card className="shadow-xl">
         <CardHeader>
           <CardTitle>Student Fee Status</CardTitle>
-          <CardDescription>Overview of student payments and outstanding fees.</CardDescription>
+          <CardDescription>See student payments and amounts to pay.</CardDescription>
         </CardHeader>
         <CardContent>
         {filteredStudents.length > 0 ? (
@@ -207,8 +207,8 @@ export default function FeesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Student Name</TableHead>
-                  <TableHead>Fee Plan</TableHead>
-                  <TableHead>Fees Due</TableHead>
+                  <TableHead>Payment Type</TableHead>
+                  <TableHead>Amount to Pay</TableHead>
                   <TableHead>Last Payment</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -218,14 +218,14 @@ export default function FeesPage() {
                 {filteredStudents.map((student) => (
                   <TableRow key={student.id}>
                     <TableCell className="font-medium">{student.fullName}</TableCell>
-                    <TableCell>{getStudentFeePlanName(student)}</TableCell>
+                    <TableCell>{getStudentPaymentTypeName(student)}</TableCell>
                     <TableCell className={student.feesDue > 0 ? 'text-destructive font-semibold' : 'text-green-600'}>
-                      ${student.feesDue.toFixed(2)}
+                      ₹{student.feesDue.toFixed(2)}
                     </TableCell>
                     <TableCell>{student.lastPaymentDate ? new Date(student.lastPaymentDate).toLocaleDateString() : 'N/A'}</TableCell>
                     <TableCell>
                       <Badge variant={student.feesDue > 0 && student.status !== 'inactive' ? 'destructive' : (student.status === 'inactive' ? 'secondary' : 'default')} className="capitalize">
-                        {student.status === 'inactive' ? 'Inactive' : (student.feesDue > 0 ? 'Owing' : 'Paid')}
+                        {student.status === 'inactive' ? 'Inactive' : (student.feesDue > 0 ? 'Has Dues' : 'Paid')}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
@@ -243,7 +243,7 @@ export default function FeesPage() {
                               </DropdownMenuItem>
                               {student.feesDue > 0 && (
                                 <DropdownMenuItem onClick={() => markAsPaid(student.id)} disabled={isSubmitting}>
-                                  <CheckCircle className="mr-2 h-4 w-4" /> Mark as Paid
+                                  <CheckCircle className="mr-2 h-4 w-4" /> Clear Dues
                                 </DropdownMenuItem>
                               )}
                             </>
@@ -281,7 +281,7 @@ export default function FeesPage() {
           <form onSubmit={handlePaymentSubmit}>
             <div className="space-y-4 py-4">
               <div>
-                <Label htmlFor="amount">Amount</Label>
+                <Label htmlFor="amount">Amount (₹)</Label>
                 <Input
                   id="amount"
                   type="number"
@@ -342,7 +342,7 @@ export default function FeesPage() {
                   {getStudentPayments().map(p => (
                     <TableRow key={p.id}>
                       <TableCell>{new Date(p.paymentDate).toLocaleDateString()}</TableCell>
-                      <TableCell>${p.amount.toFixed(2)}</TableCell>
+                      <TableCell>₹{p.amount.toFixed(2)}</TableCell>
                       <TableCell>{p.notes || 'N/A'}</TableCell>
                     </TableRow>
                   ))}

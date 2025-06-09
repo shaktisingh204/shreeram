@@ -1,3 +1,4 @@
+
 "use server";
 
 import { generateMonthlyFeeReport, type GenerateMonthlyFeeReportInput } from "@/ai/flows/generate-monthly-fee-report";
@@ -8,7 +9,7 @@ const GenerateReportSchema = z.object({
   year: z.string().length(4, "Year must be 4 digits.").regex(/^\d{4}$/, "Invalid year format."),
   expectedTotalFees: z.coerce.number().min(0, "Expected fees cannot be negative."),
   receivedTotalFees: z.coerce.number().min(0, "Received fees cannot be negative."),
-  currency: z.string().default("USD"),
+  currency: z.string().default("INR"),
 });
 
 export async function generateReportAction(input: GenerateMonthlyFeeReportInput) {
@@ -24,7 +25,7 @@ export async function generateReportAction(input: GenerateMonthlyFeeReportInput)
     const result = await generateMonthlyFeeReport(validatedInput.data);
     return { success: true, report: result.report, error: null };
   } catch (error) {
-    console.error("Error generating report:", error);
-    return { success: false, error: "Failed to generate report due to an internal error.", report: null };
+    console.error("Error generating statement:", error);
+    return { success: false, error: "Failed to generate statement due to an internal error.", report: null };
   }
 }

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -47,7 +48,7 @@ export default function EditStudentPage({ params }: EditStudentPageProps) {
       await updateStudent(studentId as string, values);
       toast({
         title: "Success",
-        description: "Student details updated successfully.",
+        description: "Student details saved.",
       });
       router.push('/students');
       router.refresh(); 
@@ -55,7 +56,7 @@ export default function EditStudentPage({ params }: EditStudentPageProps) {
        console.error("Failed to update student:", error);
       toast({
         title: "Error",
-        description: "Could not update student. Please try again.",
+        description: "Could not save student details. Please try again.",
         variant: "destructive",
       });
     } finally {

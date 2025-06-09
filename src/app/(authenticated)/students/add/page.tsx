@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -17,15 +18,15 @@ export default function AddStudentPage() {
       await addStudent(values);
       toast({
         title: "Success",
-        description: "Student added successfully.",
+        description: "New student added.",
       });
       router.push('/students');
-      router.refresh(); // Ensures the student list is updated
+      router.refresh(); 
     } catch (error) {
       console.error("Failed to add student:", error);
       toast({
         title: "Error",
-        description: "Could not add student. Please try again.",
+        description: "Could not add new student. Please try again.",
         variant: "destructive",
       });
     } finally {

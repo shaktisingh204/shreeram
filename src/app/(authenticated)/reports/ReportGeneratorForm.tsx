@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -19,7 +20,7 @@ const reportSchema = z.object({
   year: z.string().length(4, "Year must be 4 digits.").regex(/^\d{4}$/, "Invalid year format."),
   expectedTotalFees: z.coerce.number().min(0, "Expected fees must be a positive number."),
   receivedTotalFees: z.coerce.number().min(0, "Received fees must be a positive number."),
-  currency: z.string().default("USD"),
+  currency: z.string().default("INR"),
 });
 
 type ReportFormValues = z.infer<typeof reportSchema>;
@@ -45,7 +46,7 @@ export function ReportGeneratorForm() {
       year: new Date().getFullYear().toString(),
       expectedTotalFees: 0,
       receivedTotalFees: 0,
-      currency: "USD",
+      currency: "INR",
     },
   });
 
@@ -56,10 +57,10 @@ export function ReportGeneratorForm() {
       const result = await generateReportAction(data);
       if (result.success && result.report) {
         setGeneratedReport(result.report);
-        toast({ title: "Success", description: "Report generated successfully." });
+        toast({ title: "Success", description: "Statement generated." });
       } else {
         setGeneratedReport(`Error: ${result.error || "Unknown error"}`);
-        toast({ title: "Error", description: result.error || "Failed to generate report.", variant: "destructive" });
+        toast({ title: "Error", description: result.error || "Failed to generate statement.", variant: "destructive" });
       }
     } catch (error) {
       setGeneratedReport("Error: An unexpected error occurred.");
@@ -73,8 +74,8 @@ export function ReportGeneratorForm() {
     <div className="space-y-6">
       <Card className="shadow-xl">
         <CardHeader>
-          <CardTitle className="font-headline text-2xl text-primary">Monthly Fee Report Generator</CardTitle>
-          <CardDescription>Enter the details to generate a monthly fee report using AI.</CardDescription>
+          <CardTitle className="font-headline text-2xl text-primary">Monthly Fee Statement</CardTitle>
+          <CardDescription>Enter details for an AI-generated monthly fee statement.</CardDescription>
         </CardHeader>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <CardContent className="space-y-4">
@@ -102,26 +103,26 @@ export function ReportGeneratorForm() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                <div>
-                <Label htmlFor="expectedTotalFees">Expected Total Fees</Label>
+                <Label htmlFor="expectedTotalFees">Total Expected Fees (₹)</Label>
                 <Input id="expectedTotalFees" type="number" {...form.register("expectedTotalFees")} />
                 {form.formState.errors.expectedTotalFees && <p className="text-sm text-destructive mt-1">{form.formState.errors.expectedTotalFees.message}</p>}
               </div>
               <div>
-                <Label htmlFor="receivedTotalFees">Received Total Fees</Label>
+                <Label htmlFor="receivedTotalFees">Total Received Fees (₹)</Label>
                 <Input id="receivedTotalFees" type="number" {...form.register("receivedTotalFees")} />
                 {form.formState.errors.receivedTotalFees && <p className="text-sm text-destructive mt-1">{form.formState.errors.receivedTotalFees.message}</p>}
               </div>
             </div>
             <div>
               <Label htmlFor="currency">Currency</Label>
-              <Input id="currency" {...form.register("currency")} defaultValue="USD" />
+              <Input id="currency" {...form.register("currency")} defaultValue="INR" />
               {form.formState.errors.currency && <p className="text-sm text-destructive mt-1">{form.formState.errors.currency.message}</p>}
             </div>
           </CardContent>
           <CardFooter>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
-              Generate Report
+              Generate Statement
             </Button>
           </CardFooter>
         </form>
@@ -130,7 +131,7 @@ export function ReportGeneratorForm() {
       {generatedReport && (
         <Card className="shadow-xl">
           <CardHeader>
-            <CardTitle className="font-headline text-xl text-primary">Generated Report</CardTitle>
+            <CardTitle className="font-headline text-xl text-primary">Generated Statement</CardTitle>
           </CardHeader>
           <CardContent>
             <Textarea value={generatedReport} readOnly rows={15} className="font-mono text-sm bg-muted/30" />

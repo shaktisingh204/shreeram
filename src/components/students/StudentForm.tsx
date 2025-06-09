@@ -17,15 +17,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { Student, Seat, FeePlan } from "@/types";
+import type { Student, Seat, PaymentType } from "@/types"; // Renamed FeePlan to PaymentType
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getSeats, getFeePlans } from "@/lib/data";
+import { getSeats, getPaymentTypes } from "@/lib/data"; // Renamed getFeePlans
 
-const NONE_SELECT_VALUE = "__NONE_PLACEHOLDER__"; // Special value for no selection
+const NONE_SELECT_VALUE = "__NONE__"; 
 
 const studentFormSchema = z.object({
   fullName: z.string().min(2, { message: "Full name must be at least 2 characters." }).max(100),
@@ -33,18 +33,18 @@ const studentFormSchema = z.object({
   photoUrl: z.string().url({ message: "Invalid URL for photo." }).optional().or(z.literal('')),
   idProofUrl: z.string().url({ message: "Invalid URL for ID proof." }).optional().or(z.literal('')),
   notes: z.string().max(500).optional(),
-  seatId: z.string(), // Will hold actual seat ID or NONE_SELECT_VALUE
+  seatId: z.string(), 
   status: z.enum(["enrolled", "owing", "inactive"]),
-  feesDue: z.coerce.number().min(0, { message: "Fees due cannot be negative." }),
+  feesDue: z.coerce.number().min(0, { message: "Amount to Pay cannot be negative." }), // Updated message
   enrollmentDate: z.string().refine((date) => !isNaN(Date.parse(date)), { message: "Invalid date format." }),
-  feePlanId: z.string(), // Will hold actual fee plan ID or NONE_SELECT_VALUE
+  paymentTypeId: z.string(), // Renamed from feePlanId
 });
 
 export type StudentFormValues = z.infer<typeof studentFormSchema>;
 
 interface StudentFormProps {
   initialData?: Student;
-  onSubmit: (values: Omit<StudentFormValues, 'seatId' | 'feePlanId'> & { seatId?: string; feePlanId?: string }) => Promise<void>;
+  onSubmit: (values: Omit<StudentFormValues, 'seatId' | 'paymentTypeId'> & { seatId?: string; paymentTypeId?: string }) => Promise<void>; // Renamed feePlanId
   isSubmitting: boolean;
 }
 
@@ -52,7 +52,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
   const router = useRouter();
   const { toast } = useToast();
   const [availableSeats, setAvailableSeats] = useState<Seat[]>([]);
-  const [feePlans, setFeePlans] = useState<FeePlan[]>([]);
+  const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]); // Renamed from feePlans
 
   useEffect(() => {
     async function fetchData() {
@@ -60,8 +60,8 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
       const currentSeatId = initialData?.seatId;
       setAvailableSeats(seatsData.filter(seat => !seat.isOccupied || seat.id === currentSeatId));
       
-      const plans = await getFeePlans();
-      setFeePlans(plans);
+      const plans = await getPaymentTypes(); // Renamed function
+      setPaymentTypes(plans);
     }
     fetchData();
   }, [initialData]);
@@ -73,7 +73,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
       feesDue: initialData.feesDue || 0,
       enrollmentDate: initialData.enrollmentDate || new Date().toISOString().split('T')[0],
       seatId: initialData.seatId || NONE_SELECT_VALUE, 
-      feePlanId: initialData.feePlanId || NONE_SELECT_VALUE,
+      paymentTypeId: initialData.paymentTypeId || NONE_SELECT_VALUE, // Renamed from feePlanId
       photoUrl: initialData.photoUrl || "",
       idProofUrl: initialData.idProofUrl || "",
       notes: initialData.notes || "",
@@ -84,10 +84,10 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
       idProofUrl: "",
       notes: "",
       seatId: NONE_SELECT_VALUE,
-      status: "enrolled",
+      status: "enrolled", // Default to 'Active' or 'Enrolled'
       feesDue: 0,
       enrollmentDate: new Date().toISOString().split('T')[0],
-      feePlanId: NONE_SELECT_VALUE,
+      paymentTypeId: NONE_SELECT_VALUE, // Renamed from feePlanId
     },
   });
 
@@ -96,7 +96,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
       const submissionValues = {
         ...values,
         seatId: values.seatId === NONE_SELECT_VALUE ? undefined : values.seatId,
-        feePlanId: values.feePlanId === NONE_SELECT_VALUE ? undefined : values.feePlanId,
+        paymentTypeId: values.paymentTypeId === NONE_SELECT_VALUE ? undefined : values.paymentTypeId, // Renamed from feePlanId
       };
       await onSubmit(submissionValues);
     } catch (error) {
@@ -112,7 +112,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
     <Card className="max-w-2xl mx-auto shadow-xl">
       <CardHeader>
         <CardTitle className="font-headline text-2xl text-primary">
-          {initialData ? "Edit Student" : "Add New Student"}
+          {initialData ? "Edit Student Details" : "Add New Student"}
         </CardTitle>
       </CardHeader>
       <Form {...form}>
@@ -179,7 +179,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
               name="enrollmentDate"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Enrollment Date</FormLabel>
+                  <FormLabel>Joined On</FormLabel>
                   <FormControl>
                     <Input type="date" {...field} />
                   </FormControl>
@@ -193,15 +193,15 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                 name="seatId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Assign Seat (Optional)</FormLabel>
+                    <FormLabel>Choose Seat (Optional)</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select a seat" />
+                          <SelectValue placeholder="Choose a seat" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value={NONE_SELECT_VALUE}>No Seat</SelectItem>
+                        <SelectItem value={NONE_SELECT_VALUE}>No Seat Assigned</SelectItem>
                         {availableSeats.map(seat => (
                           <SelectItem key={seat.id} value={seat.id}>
                             {seat.seatNumber} ({seat.floor})
@@ -226,8 +226,8 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="enrolled">Enrolled</SelectItem>
-                        <SelectItem value="owing">Owing</SelectItem>
+                        <SelectItem value="enrolled">Active</SelectItem>
+                        <SelectItem value="owing">Has Dues</SelectItem>
                         <SelectItem value="inactive">Inactive</SelectItem>
                       </SelectContent>
                     </Select>
@@ -242,7 +242,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                 name="feesDue"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Fees Due</FormLabel>
+                    <FormLabel>Amount to Pay (₹)</FormLabel>
                     <FormControl>
                       <Input type="number" placeholder="0.00" {...field} />
                     </FormControl>
@@ -252,21 +252,21 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
               />
               <FormField
                 control={form.control}
-                name="feePlanId"
+                name="paymentTypeId" // Renamed from feePlanId
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Fee Plan (Optional)</FormLabel>
+                    <FormLabel>Payment Type (Optional)</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select a fee plan" />
+                          <SelectValue placeholder="Choose a payment type" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value={NONE_SELECT_VALUE}>No Plan</SelectItem>
-                        {feePlans.map(plan => (
+                        <SelectItem value={NONE_SELECT_VALUE}>No Payment Type</SelectItem>
+                        {paymentTypes.map(plan => ( // Renamed feePlans to paymentTypes
                           <SelectItem key={plan.id} value={plan.id}>
-                            {plan.name} (${plan.amount}/{plan.frequency})
+                            {plan.name} (₹{plan.amount}/{plan.frequency})
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -304,5 +304,3 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
     </Card>
   );
 }
-
-    

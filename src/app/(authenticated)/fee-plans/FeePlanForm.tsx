@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -14,29 +15,29 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { FeePlan } from "@/types";
+import type { PaymentType } from "@/types"; // Renamed from FeePlan
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 
-const feePlanFormSchema = z.object({
-  name: z.string().min(2, { message: "Plan name must be at least 2 characters." }).max(50),
+const paymentTypeFormSchema = z.object({ // Renamed from feePlanFormSchema
+  name: z.string().min(2, { message: "Type name must be at least 2 characters." }).max(50),
   amount: z.coerce.number().min(0, { message: "Amount cannot be negative." }),
   frequency: z.enum(["monthly", "quarterly", "annually"]),
 });
 
-export type FeePlanFormValues = z.infer<typeof feePlanFormSchema>;
+export type PaymentTypeFormValues = z.infer<typeof paymentTypeFormSchema>; // Renamed from FeePlanFormValues
 
-interface FeePlanFormProps {
-  initialData?: FeePlan;
-  onSubmit: (values: FeePlanFormValues) => Promise<void>;
+interface PaymentTypeFormProps { // Renamed from FeePlanFormProps
+  initialData?: PaymentType; // Renamed from FeePlan
+  onSubmit: (values: PaymentTypeFormValues) => Promise<void>;
   isSubmitting: boolean;
   onCancel: () => void;
 }
 
-export function FeePlanForm({ initialData, onSubmit, isSubmitting, onCancel }: FeePlanFormProps) {
-  const form = useForm<FeePlanFormValues>({
-    resolver: zodResolver(feePlanFormSchema),
+export function PaymentTypeForm({ initialData, onSubmit, isSubmitting, onCancel }: PaymentTypeFormProps) { // Renamed from FeePlanForm
+  const form = useForm<PaymentTypeFormValues>({
+    resolver: zodResolver(paymentTypeFormSchema),
     defaultValues: initialData || {
       name: "",
       amount: 0,
@@ -48,7 +49,7 @@ export function FeePlanForm({ initialData, onSubmit, isSubmitting, onCancel }: F
     <Card className="w-full max-w-lg mx-auto shadow-lg">
         <CardHeader>
             <CardTitle className="font-headline text-xl text-primary">
-            {initialData ? "Edit Fee Plan" : "Add New Fee Plan"}
+            {initialData ? "Edit Payment Type" : "Add New Payment Type"}
             </CardTitle>
         </CardHeader>
         <Form {...form}>
@@ -59,7 +60,7 @@ export function FeePlanForm({ initialData, onSubmit, isSubmitting, onCancel }: F
                 name="name"
                 render={({ field }) => (
                     <FormItem>
-                    <FormLabel>Plan Name</FormLabel>
+                    <FormLabel>Type Name</FormLabel>
                     <FormControl>
                         <Input placeholder="e.g., Standard Monthly" {...field} />
                     </FormControl>
@@ -72,7 +73,7 @@ export function FeePlanForm({ initialData, onSubmit, isSubmitting, onCancel }: F
                 name="amount"
                 render={({ field }) => (
                     <FormItem>
-                    <FormLabel>Amount ($)</FormLabel>
+                    <FormLabel>Amount (₹)</FormLabel>
                     <FormControl>
                         <Input type="number" placeholder="100" {...field} />
                     </FormControl>
@@ -85,17 +86,17 @@ export function FeePlanForm({ initialData, onSubmit, isSubmitting, onCancel }: F
                 name="frequency"
                 render={({ field }) => (
                     <FormItem>
-                    <FormLabel>Frequency</FormLabel>
+                    <FormLabel>Payment Cycle</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
                         <SelectTrigger>
-                            <SelectValue placeholder="Select frequency" />
+                            <SelectValue placeholder="Select cycle" />
                         </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                        <SelectItem value="quarterly">Quarterly</SelectItem>
-                        <SelectItem value="annually">Annually</SelectItem>
+                        <SelectItem value="monthly">Every Month</SelectItem>
+                        <SelectItem value="quarterly">Every 3 Months</SelectItem>
+                        <SelectItem value="annually">Every Year</SelectItem>
                         </SelectContent>
                     </Select>
                     <FormMessage />
@@ -109,7 +110,7 @@ export function FeePlanForm({ initialData, onSubmit, isSubmitting, onCancel }: F
                 </Button>
                 <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {initialData ? "Save Changes" : "Add Plan"}
+                {initialData ? "Save Changes" : "Add Type"}
                 </Button>
             </CardFooter>
             </form>

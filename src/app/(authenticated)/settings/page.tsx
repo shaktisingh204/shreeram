@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +21,7 @@ export default function SettingsPage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Account Settings</CardTitle>
-          <CardDescription>Manage your admin account preferences.</CardDescription>
+          <CardDescription>Change your admin account settings.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -54,14 +55,14 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between">
             <div>
               <Label htmlFor="emailNotifications">Email Notifications</Label>
-              <p className="text-sm text-muted-foreground">Receive email updates for important events.</p>
+              <p className="text-sm text-muted-foreground">Get email updates for key events.</p>
             </div>
             <Switch id="emailNotifications" defaultChecked disabled />
           </div>
           <div className="flex items-center justify-between">
             <div>
               <Label htmlFor="feesDueReminders">Fees Due Reminders</Label>
-              <p className="text-sm text-muted-foreground">Get reminders for students with upcoming fee deadlines.</p>
+              <p className="text-sm text-muted-foreground">Get reminders for student fee deadlines.</p>
             </div>
             <Switch id="feesDueReminders" defaultChecked disabled />
           </div>
@@ -73,7 +74,7 @@ export default function SettingsPage() {
        <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Application Theme</CardTitle>
-          <CardDescription>Customize the look and feel of the application.</CardDescription>
+          <CardDescription>Change how the app looks.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
            <p className="text-sm text-muted-foreground">Theme customization is currently managed globally. Dark mode can be toggled via browser/OS settings if configured in `globals.css` and `tailwind.config.ts`.</p>

@@ -54,7 +54,7 @@ export default function SeatsPage() {
   const [seatFormDialogMode, setSeatFormDialogMode] = useState<'add' | 'edit'>('add');
   
   const [seatToDelete, setSeatToDelete] = useState<Seat | null>(null);
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false); // Corrected line
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false); 
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
@@ -119,11 +119,11 @@ export default function SeatsPage() {
     setIsSubmitting(true);
     try {
       await unassignSeatAction(selectedSeatForAssignment.id);
-      toast({ title: "Success", description: `Seat ${selectedSeatForAssignment.seatNumber} (${selectedSeatForAssignment.floor}) is now vacant.` });
+      toast({ title: "Success", description: `Seat ${selectedSeatForAssignment.seatNumber} (${selectedSeatForAssignment.floor}) is now empty.` });
       await fetchAllData();
       setIsAssignDialogOpen(false);
     } catch (error) {
-        toast({ title: "Error", description: (error as Error).message || "Failed to unassign seat.", variant: "destructive" });
+        toast({ title: "Error", description: (error as Error).message || "Failed to make seat empty.", variant: "destructive" });
     }
     setIsSubmitting(false);
   };
@@ -195,7 +195,7 @@ export default function SeatsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-headline font-bold text-primary">Seat Management</h1>
+        <h1 className="text-3xl font-headline font-bold text-primary">Seat Setup</h1>
         <div className="flex items-center gap-4">
            <Button onClick={openAddSeatDialog}>
             <PlusCircle className="mr-2 h-4 w-4" /> Add New Seat
@@ -239,7 +239,7 @@ export default function SeatsPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => openAssignDialog(seat)}>
-                              {seat.isOccupied ? "Manage Assignment" : "Assign Student"}
+                              {seat.isOccupied ? "Update Assignment" : "Assign Student"}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => openEditSeatDialog(seat)}>
@@ -290,11 +290,11 @@ export default function SeatsPage() {
       <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Manage Seat: {selectedSeatForAssignment?.seatNumber} ({selectedSeatForAssignment?.floor})</DialogTitle>
+            <DialogTitle>Update Seat: {selectedSeatForAssignment?.seatNumber} ({selectedSeatForAssignment?.floor})</DialogTitle>
             <DialogDescription>
               {selectedSeatForAssignment?.isOccupied 
-                ? `Seat currently assigned to ${selectedSeatForAssignment.studentName}. You can change assignment or unassign.`
-                : `Assign this seat to a student.`}
+                ? `This seat is taken by ${selectedSeatForAssignment.studentName}. You can assign it to someone else or make it empty.`
+                : `Choose a student for this seat.`}
             </DialogDescription>
           </DialogHeader>
           
@@ -319,7 +319,7 @@ export default function SeatsPage() {
           <DialogFooter className="sm:justify-between items-center">
             {selectedSeatForAssignment?.isOccupied ? (
               <Button variant="destructive" onClick={handleUnassignSeat} disabled={isSubmitting}>
-                {isSubmitting && selectedSeatForAssignment?.studentId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Unassign Seat
+                {isSubmitting && selectedSeatForAssignment?.studentId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Make Seat Empty
               </Button>
             ) : <div/> /* Placeholder for alignment */}
             <div className="flex gap-2 mt-2 sm:mt-0">
@@ -332,7 +332,7 @@ export default function SeatsPage() {
                 disabled={isSubmitting || !selectedStudentIdForAssignment || selectedStudentIdForAssignment === selectedSeatForAssignment?.studentId}
               >
                 {isSubmitting && selectedStudentIdForAssignment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} 
-                {selectedSeatForAssignment?.isOccupied && selectedSeatForAssignment?.studentId !== selectedStudentIdForAssignment ? 'Reassign Seat' : 'Assign Seat'}
+                {selectedSeatForAssignment?.isOccupied && selectedSeatForAssignment?.studentId !== selectedStudentIdForAssignment ? 'Change Student' : 'Confirm Assignment'}
               </Button>
             </div>
           </DialogFooter>
@@ -376,4 +376,3 @@ export default function SeatsPage() {
     </div>
   );
 }
-

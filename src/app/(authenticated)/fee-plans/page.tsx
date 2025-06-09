@@ -1,22 +1,17 @@
+
 "use client";
 
 import { useEffect, useState } from 'react';
-import { getFeePlans, addFeePlan, updateFeePlan } from '@/lib/data';
-import type { FeePlan } from '@/types';
+import { getPaymentTypes, addPaymentType, updatePaymentType } from '@/lib/data'; // Renamed functions
+import type { PaymentType } from '@/types'; // Renamed type
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { PlusCircle, Edit, Trash2, Loader2, MoreHorizontal, ListChecks } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { FeePlanForm, type FeePlanFormValues } from './FeePlanForm';
+import { PaymentTypeForm, type PaymentTypeFormValues } from './FeePlanForm'; // Component name will be updated in its own file
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogTrigger,
-  DialogClose,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -27,18 +22,18 @@ import {
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 
 
-export default function FeePlansPage() {
-  const [feePlans, setFeePlans] = useState<FeePlan[]>([]);
+export default function PaymentTypesPage() { // Renamed component
+  const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]); // Renamed state
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingPlan, setEditingPlan] = useState<FeePlan | undefined>(undefined);
+  const [editingPaymentType, setEditingPaymentType] = useState<PaymentType | undefined>(undefined); // Renamed state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
   const fetchData = async () => {
     setLoading(true);
-    const data = await getFeePlans();
-    setFeePlans(data);
+    const data = await getPaymentTypes(); // Renamed function
+    setPaymentTypes(data);
     setLoading(false);
   };
 
@@ -47,40 +42,38 @@ export default function FeePlansPage() {
   }, []);
 
   const handleAddClick = () => {
-    setEditingPlan(undefined);
+    setEditingPaymentType(undefined);
     setIsFormOpen(true);
   };
 
-  const handleEditClick = (plan: FeePlan) => {
-    setEditingPlan(plan);
+  const handleEditClick = (plan: PaymentType) => {
+    setEditingPaymentType(plan);
     setIsFormOpen(true);
   };
 
   const handleDeleteClick = async (planId: string) => {
-    if (confirm("Are you sure you want to delete this fee plan? This action cannot be undone.")) {
-        // In a real app, call deleteFeePlan(planId)
-        // For mock, filter out the plan
-        setFeePlans(prevPlans => prevPlans.filter(p => p.id !== planId));
-        toast({ title: "Success", description: "Fee plan deleted (mock)." });
-        // await fetchData(); // if you have a real backend delete
+    if (confirm("Are you sure you want to delete this payment type? This action cannot be undone.")) {
+        // In a real app, call deletePaymentType(planId)
+        setPaymentTypes(prevPlans => prevPlans.filter(p => p.id !== planId));
+        toast({ title: "Success", description: "Payment type deleted (mock)." });
     }
   };
 
-  const handleFormSubmit = async (values: FeePlanFormValues) => {
+  const handleFormSubmit = async (values: PaymentTypeFormValues) => {
     setIsSubmitting(true);
     try {
-      if (editingPlan) {
-        await updateFeePlan(editingPlan.id, values);
-        toast({ title: "Success", description: "Fee plan updated." });
+      if (editingPaymentType) {
+        await updatePaymentType(editingPaymentType.id, values); // Renamed function
+        toast({ title: "Success", description: "Payment type updated." });
       } else {
-        await addFeePlan(values);
-        toast({ title: "Success", description: "Fee plan added." });
+        await addPaymentType(values); // Renamed function
+        toast({ title: "Success", description: "Payment type added." });
       }
       await fetchData();
       setIsFormOpen(false);
-      setEditingPlan(undefined);
+      setEditingPaymentType(undefined);
     } catch (error) {
-      toast({ title: "Error", description: "Failed to save fee plan.", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to save payment type.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -93,50 +86,59 @@ export default function FeePlansPage() {
       </div>
     );
   }
+  
+  const getFrequencyDisplay = (frequency: PaymentType['frequency']) => {
+    switch (frequency) {
+      case 'monthly': return 'Every Month';
+      case 'quarterly': return 'Every 3 Months';
+      case 'annually': return 'Every Year';
+      default: return frequency;
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-headline font-bold text-primary">Fee Plans</h1>
+        <h1 className="text-3xl font-headline font-bold text-primary">Payment Types</h1>
         <Button onClick={handleAddClick}>
-          <PlusCircle className="mr-2 h-4 w-4" /> Add Fee Plan
+          <PlusCircle className="mr-2 h-4 w-4" /> Add Payment Type
         </Button>
       </div>
       
-      <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if (!open) setEditingPlan(undefined); }}>
+      <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if (!open) setEditingPaymentType(undefined); }}>
         <DialogContent className="sm:max-w-[425px]">
-            <FeePlanForm
-                initialData={editingPlan}
+            <PaymentTypeForm 
+                initialData={editingPaymentType}
                 onSubmit={handleFormSubmit}
                 isSubmitting={isSubmitting}
-                onCancel={() => {setIsFormOpen(false); setEditingPlan(undefined);}}
+                onCancel={() => {setIsFormOpen(false); setEditingPaymentType(undefined);}}
             />
         </DialogContent>
       </Dialog>
 
       <Card className="shadow-xl">
         <CardHeader>
-            <CardTitle>Existing Fee Plans</CardTitle>
-            <CardDescription>Manage different fee structures for students.</CardDescription>
+            <CardTitle>Existing Payment Types</CardTitle>
+            <CardDescription>Manage different payment options for students.</CardDescription>
         </CardHeader>
         <CardContent>
-            {feePlans.length > 0 ? (
+            {paymentTypes.length > 0 ? (
             <div className="overflow-x-auto rounded-md border">
             <Table>
                 <TableHeader>
                 <TableRow>
-                    <TableHead>Plan Name</TableHead>
+                    <TableHead>Type Name</TableHead>
                     <TableHead>Amount</TableHead>
-                    <TableHead>Frequency</TableHead>
+                    <TableHead>Payment Cycle</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
                 </TableHeader>
                 <TableBody>
-                {feePlans.map((plan) => (
+                {paymentTypes.map((plan) => (
                     <TableRow key={plan.id}>
                     <TableCell className="font-medium">{plan.name}</TableCell>
-                    <TableCell>${plan.amount.toFixed(2)}</TableCell>
-                    <TableCell className="capitalize">{plan.frequency}</TableCell>
+                    <TableCell>₹{plan.amount.toFixed(2)}</TableCell>
+                    <TableCell>{getFrequencyDisplay(plan.frequency)}</TableCell>
                     <TableCell className="text-right">
                         <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -163,12 +165,12 @@ export default function FeePlansPage() {
             ) : (
              <div className="text-center py-12">
                 <ListChecks className="mx-auto h-12 w-12 text-muted-foreground" />
-                <h3 className="mt-2 text-xl font-semibold">No Fee Plans Found</h3>
+                <h3 className="mt-2 text-xl font-semibold">No Payment Types Found</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                    Get started by adding a new fee plan.
+                    Add a new payment type to start.
                 </p>
                  <Button className="mt-4" onClick={handleAddClick}>
-                    <PlusCircle className="mr-2 h-4 w-4" /> Add Fee Plan
+                    <PlusCircle className="mr-2 h-4 w-4" /> Add Payment Type
                 </Button>
             </div>
             )}
