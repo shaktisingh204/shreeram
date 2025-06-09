@@ -44,7 +44,7 @@ export default function LoginPage() {
           <div className="flex justify-center mb-4">
             <LogIn className="h-12 w-12 text-primary" />
           </div>
-          <CardTitle className="text-3xl font-headline">SeatSmart Admin</CardTitle>
+          <CardTitle className="text-3xl font-headline">Shree Ram Education Admin</CardTitle>
           <CardDescription>Enter your password to access the admin panel</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>

@@ -73,7 +73,7 @@ export default function AuthenticatedLayout({
         </header>
         <main className="flex-1 p-6">{children}</main>
          <footer className="border-t p-4 text-center text-sm text-muted-foreground">
-            © {new Date().getFullYear()} SeatSmart. All rights reserved.
+            © {new Date().getFullYear()} Shree Ram Education. All rights reserved.
         </footer>
       </SidebarInset>
     </SidebarProvider>

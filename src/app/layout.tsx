@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from '@/context/AuthContext';
 
 export const metadata: Metadata = {
-  title: 'SeatSmart',
+  title: 'Shree Ram Education',
   description: 'Student and Seat Management System',
 };
 

@@ -28,10 +28,10 @@ import {
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/students', label: 'Students', icon: Users },
-  { href: '/seats', label: 'Seat Setup', icon: Armchair }, // Updated label
-  { href: '/fees', label: 'Fee Collection', icon: DollarSign }, // Updated label
-  { href: '/reports', label: 'Statements', icon: FileText }, // Updated label
-  { href: '/fee-plans', label: 'Payment Types', icon: ListChecks }, // Updated label
+  { href: '/seats', label: 'Seat Setup', icon: Armchair },
+  { href: '/fees', label: 'Fee Collection', icon: DollarSign },
+  { href: '/reports', label: 'Statements', icon: FileText },
+  { href: '/fee-plans', label: 'Payment Types', icon: ListChecks },
 ];
 
 export function AppSidebar() {
@@ -43,8 +43,8 @@ export function AppSidebar() {
       <SidebarHeader className="flex items-center justify-center p-4 border-b border-sidebar-border">
         <Link href="/dashboard" className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
             <BookOpenCheck className="h-8 w-8 text-sidebar-primary group-data-[collapsible=icon]:h-7 group-data-[collapsible=icon]:w-7" />
-          <h1 className="text-2xl font-headline font-bold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
-            SeatSmart
+          <h1 className="text-xl font-headline font-bold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
+            Shree Ram Education
           </h1>
         </Link>
       </SidebarHeader>
