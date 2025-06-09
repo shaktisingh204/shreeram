@@ -12,7 +12,6 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-  // FormDescription, // No longer used directly in CardHeader
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -62,9 +61,10 @@ interface UserFormProps {
   isSubmitting: boolean;
   onCancel: () => void;
   mode: 'add' | 'edit';
+  renderHeader?: boolean; // New prop
 }
 
-export function UserForm({ initialData, onSubmit, isSubmitting, onCancel, mode }: UserFormProps) {
+export function UserForm({ initialData, onSubmit, isSubmitting, onCancel, mode, renderHeader = true }: UserFormProps) {
   const [libraries, setLibraries] = useState<LibraryMetadata[]>([]);
 
   useEffect(() => {
@@ -100,12 +100,14 @@ export function UserForm({ initialData, onSubmit, isSubmitting, onCancel, mode }
 
   return (
     <Card className="w-full max-w-lg mx-auto shadow-lg">
-        <CardHeader>
-            <CardTitle className="font-headline text-xl text-primary">
-            {mode === 'edit' ? "Edit Manager Details" : "Add New Manager"}
-            </CardTitle>
-            {mode === 'add' && <p className="text-sm text-muted-foreground pt-1">Create a new manager account and assign them to a library.</p>}
-        </CardHeader>
+        {renderHeader && (
+          <CardHeader>
+              <CardTitle className="font-headline text-xl text-primary">
+              {mode === 'edit' ? "Edit Manager Details" : "Add New Manager"}
+              </CardTitle>
+              {mode === 'add' && <p className="text-sm text-muted-foreground pt-1">Create a new manager account and assign them to a library.</p>}
+          </CardHeader>
+        )}
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)}>
             <CardContent className="space-y-4">

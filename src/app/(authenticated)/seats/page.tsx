@@ -374,12 +374,19 @@ export default function SeatsPage() {
       {/* Add/Edit Seat Dialog */}
       <Dialog open={isSeatFormOpen} onOpenChange={(open) => {if(!open) setEditingSeat(null); setIsSeatFormOpen(open);}}>
         <DialogContent>
+            <DialogHeader>
+                <DialogTitle>{seatFormDialogMode === 'edit' ? "Edit Seat" : "Add New Seat"}</DialogTitle>
+                <DialogDescription>
+                    {seatFormDialogMode === 'edit' ? "Modify the details of this seat." : "Add a new seat to the library."}
+                </DialogDescription>
+            </DialogHeader>
           <SeatForm 
             initialData={editingSeat ? { seatNumber: editingSeat.seatNumber, floor: editingSeat.floor } : undefined}
             onSubmit={handleSeatFormSubmit}
             isSubmitting={isSubmitting}
             onCancel={() => {setIsSeatFormOpen(false); setEditingSeat(null);}}
             dialogMode={seatFormDialogMode}
+            renderHeader={false}
           />
         </DialogContent>
       </Dialog>

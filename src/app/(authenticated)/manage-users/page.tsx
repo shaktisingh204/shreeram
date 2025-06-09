@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { PlusCircle, Edit, Loader2, UsersRound, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { UserForm, type UserFormValues } from './UserForm';
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/context/AuthContext';
@@ -132,12 +132,30 @@ export default function ManageUsersPage() {
       
       <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if (!open) setEditingUser(undefined); }}>
         <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+                <DialogTitle>
+                    {formMode === 'edit' ? 
+                        (editingUser ? `Edit Manager: ${editingUser.displayName}` : "Edit Manager") : 
+                        "Add New Manager"}
+                </DialogTitle>
+                {formMode === 'add' && (
+                    <DialogDescription>
+                        Create a new manager account and assign them to a library. The manager will receive an initial password.
+                    </DialogDescription>
+                )}
+                 {formMode === 'edit' && editingUser && (
+                    <DialogDescription>
+                        Update details for {editingUser.displayName}. Email cannot be changed here.
+                    </DialogDescription>
+                )}
+            </DialogHeader>
             <UserForm 
                 initialData={editingUser}
                 onSubmit={handleFormSubmit}
                 isSubmitting={isSubmitting}
                 onCancel={() => {setIsFormOpen(false); setEditingUser(undefined);}}
                 mode={formMode}
+                renderHeader={false} 
             />
         </DialogContent>
       </Dialog>

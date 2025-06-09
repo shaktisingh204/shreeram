@@ -15,27 +15,28 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { PaymentType } from "@/types"; // Renamed from FeePlan
+import type { PaymentType } from "@/types"; 
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 
-const paymentTypeFormSchema = z.object({ // Renamed from feePlanFormSchema
+const paymentTypeFormSchema = z.object({ 
   name: z.string().min(2, { message: "Type name must be at least 2 characters." }).max(50),
   amount: z.coerce.number().min(0, { message: "Amount cannot be negative." }),
   frequency: z.enum(["monthly", "quarterly", "annually"]),
 });
 
-export type PaymentTypeFormValues = z.infer<typeof paymentTypeFormSchema>; // Renamed from FeePlanFormValues
+export type PaymentTypeFormValues = z.infer<typeof paymentTypeFormSchema>; 
 
-interface PaymentTypeFormProps { // Renamed from FeePlanFormProps
-  initialData?: PaymentType; // Renamed from FeePlan
+interface PaymentTypeFormProps { 
+  initialData?: PaymentType; 
   onSubmit: (values: PaymentTypeFormValues) => Promise<void>;
   isSubmitting: boolean;
   onCancel: () => void;
+  renderHeader?: boolean; // New prop
 }
 
-export function PaymentTypeForm({ initialData, onSubmit, isSubmitting, onCancel }: PaymentTypeFormProps) { // Renamed from FeePlanForm
+export function PaymentTypeForm({ initialData, onSubmit, isSubmitting, onCancel, renderHeader = true }: PaymentTypeFormProps) { 
   const form = useForm<PaymentTypeFormValues>({
     resolver: zodResolver(paymentTypeFormSchema),
     defaultValues: initialData || {
@@ -47,11 +48,13 @@ export function PaymentTypeForm({ initialData, onSubmit, isSubmitting, onCancel 
 
   return (
     <Card className="w-full max-w-lg mx-auto shadow-lg">
-        <CardHeader>
-            <CardTitle className="font-headline text-xl text-primary">
-            {initialData ? "Edit Payment Type" : "Add New Payment Type"}
-            </CardTitle>
-        </CardHeader>
+        {renderHeader && (
+            <CardHeader>
+                <CardTitle className="font-headline text-xl text-primary">
+                {initialData ? "Edit Payment Type" : "Add New Payment Type"}
+                </CardTitle>
+            </CardHeader>
+        )}
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)}>
             <CardContent className="space-y-4">

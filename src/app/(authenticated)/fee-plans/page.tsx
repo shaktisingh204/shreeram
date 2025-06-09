@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { PlusCircle, Edit, Trash2, Loader2, MoreHorizontal, ListChecks, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PaymentTypeForm, type PaymentTypeFormValues } from './FeePlanForm';
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -139,11 +139,18 @@ export default function PaymentTypesPage() {
       
       <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if (!open) setEditingPaymentType(undefined); }}>
         <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+                <DialogTitle>{editingPaymentType ? "Edit Payment Type" : "Add New Payment Type"}</DialogTitle>
+                <DialogDescription>
+                    {editingPaymentType ? "Modify the details of the existing payment type." : "Create a new payment type for students."}
+                </DialogDescription>
+            </DialogHeader>
             <PaymentTypeForm 
                 initialData={editingPaymentType}
                 onSubmit={handleFormSubmit}
                 isSubmitting={isSubmitting}
                 onCancel={() => {setIsFormOpen(false); setEditingPaymentType(undefined);}}
+                renderHeader={false}
             />
         </DialogContent>
       </Dialog>

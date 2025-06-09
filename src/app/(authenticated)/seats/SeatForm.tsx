@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -30,9 +31,10 @@ interface SeatFormProps {
   isSubmitting: boolean;
   onCancel: () => void;
   dialogMode?: 'add' | 'edit';
+  renderHeader?: boolean; // New prop
 }
 
-export function SeatForm({ initialData, onSubmit, isSubmitting, onCancel, dialogMode = 'add' }: SeatFormProps) {
+export function SeatForm({ initialData, onSubmit, isSubmitting, onCancel, dialogMode = 'add', renderHeader = true }: SeatFormProps) {
   const form = useForm<SeatFormValues>({
     resolver: zodResolver(seatFormSchema),
     defaultValues: initialData || {
@@ -43,14 +45,16 @@ export function SeatForm({ initialData, onSubmit, isSubmitting, onCancel, dialog
 
   return (
     <Card className="w-full max-w-lg mx-auto shadow-none border-0">
-      <CardHeader className="px-0 pt-0">
-        <CardTitle className="font-headline text-xl text-primary">
-          {dialogMode === 'edit' ? "Edit Seat" : "Add New Seat"}
-        </CardTitle>
-      </CardHeader>
+      {renderHeader && (
+        <CardHeader className="px-0 pt-0">
+          <CardTitle className="font-headline text-xl text-primary">
+            {dialogMode === 'edit' ? "Edit Seat" : "Add New Seat"}
+          </CardTitle>
+        </CardHeader>
+      )}
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
-          <CardContent className="space-y-4 px-0">
+          <CardContent className="space-y-4 px-0 pt-2"> {/* Adjusted pt if header is hidden */}
             <FormField
               control={form.control}
               name="seatNumber"
