@@ -1,81 +1,35 @@
 
+import { db } from './firebase';
+import { ref, get, set, push, child, update, remove, query, orderByChild, equalTo } from 'firebase/database';
 import type { Student, Seat, PaymentType, FeePayment, DashboardSummary } from '@/types';
 
-// Initial mock students - seatId will be populated after seats are defined
-export const mockStudentsInitial: Omit<Student, 'id' | 'seatId'> & { tempSeatNumber?: string, id: string}[] = [
-  { id: '1', fullName: 'Alice Wonderland', contactDetails: 'alice@example.com', tempSeatNumber: 'F1-S1', status: 'enrolled', feesDue: 0, enrollmentDate: '2023-01-15', paymentTypeId: 'pt1', photoUrl: 'https://placehold.co/100x100.png?text=Alice', idProofUrl: 'https://placehold.co/200x150.png?text=Alice_ID' },
-  { id: '2', fullName: 'Bob The Builder', contactDetails: 'bob@example.com', tempSeatNumber: 'F1-S2', status: 'owing', feesDue: 5000, enrollmentDate: '2023-02-01', paymentTypeId: 'pt2', lastPaymentDate: '2024-06-01', photoUrl: 'https://placehold.co/100x100.png?text=Bob' },
-  { id: '3', fullName: 'Charlie Brown', contactDetails: 'charlie@example.com', status: 'inactive', feesDue: 0, enrollmentDate: '2022-11-10' },
-  { id: '4', fullName: 'Diana Prince', contactDetails: 'diana@example.com', tempSeatNumber: 'F2-S1', status: 'enrolled', feesDue: 0, enrollmentDate: '2023-03-20', paymentTypeId: 'pt1', photoUrl: 'https://placehold.co/100x100.png?text=Diana', idProofUrl: 'https://placehold.co/200x150.png?text=Diana_ID' },
-];
-
-export const mockSeats: Seat[] = Array.from({ length: 12 }, (_, i) => {
-  const floorNumber = Math.floor(i / 6) + 1;
-  const seatInFloor = (i % 6) + 1;
-  const seatNumber = `S${seatInFloor}`;
-  const studentAssigned = mockStudentsInitial.find(s => s.tempSeatNumber === `F${floorNumber}-${seatNumber}`);
-  return {
-    id: `seat-f${floorNumber}-s${seatInFloor}`,
-    seatNumber,
-    floor: `Floor ${floorNumber}`,
-    isOccupied: !!studentAssigned,
-    studentId: studentAssigned?.id,
-    studentName: studentAssigned?.fullName,
-  };
-});
-
-export let mockStudents: Student[] = mockStudentsInitial.map(sInit => {
-    const assignedSeat = mockSeats.find(seat => seat.studentId === sInit.id);
-    const { tempSeatNumber, ...studentData } = sInit;
-    return {
-        ...studentData,
-        seatId: assignedSeat?.id,
-    };
-});
+// Helper function to convert Firebase snapshot to array
+const snapshotToAray = (snapshot: any) => {
+  const items: any[] = [];
+  snapshot.forEach((childSnapshot: any) => {
+    items.push({ id: childSnapshot.key, ...childSnapshot.val() });
+  });
+  return items;
+};
 
 
-export let mockPaymentTypes: PaymentType[] = [
-  { id: 'pt1', name: 'Standard Monthly', amount: 7500, frequency: 'monthly' },
-  { id: 'pt2', name: 'Premium Monthly', amount: 11000, frequency: 'monthly' },
-  { id: 'pt3', name: 'Basic Quarterly', amount: 20000, frequency: 'quarterly' },
-];
-
-export let mockPayments: FeePayment[] = [
-  { id: 'payment1', studentId: '1', studentName: 'Alice Wonderland', amount: 7500, paymentDate: '2024-07-01', notes: 'July payment' },
-  { id: 'payment2', studentId: '2', studentName: 'Bob The Builder', amount: 5000, paymentDate: '2024-06-01', notes: 'June partial payment' },
-  { id: 'payment3', studentId: '4', studentName: 'Diana Prince', amount: 7500, paymentDate: '2024-07-05', notes: 'July payment' },
-];
-
-
-// Simulate database operations
+// Student Operations
 export const getStudents = async (): Promise<Student[]> => {
-  try {
-    // Fetch from the new API route
-    // Ensure the path is correct depending on where this function is called from.
-    // Assuming it's called client-side, '/api/students' will work.
-    // If called server-side during SSR/SSG, a full URL might be needed or direct function call.
-    // For now, assuming client-side.
-    const response = await fetch('/api/students');
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Failed to fetch students API:', response.status, errorText);
-      throw new Error(`Failed to fetch students: ${response.status}`);
-    }
-    const data = await response.json();
-    return data as Student[];
-  } catch (error) {
-    console.error("Error in getStudents:", error);
-    // Fallback to returning an empty array or re-throw to make the error visible.
-    // For development, re-throwing is often better.
-    // In a production app, you might return cached data or an empty list with a user notification.
-    throw error; 
+  const studentsRef = ref(db, 'students');
+  const snapshot = await get(studentsRef);
+  if (snapshot.exists()) {
+    return snapshotToAray(snapshot);
   }
+  return [];
 };
 
 export const getStudentById = async (id: string): Promise<Student | undefined> => {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const student = mockStudents.find(s => s.id === id);
-  return student ? {...student} : undefined;
+  const studentRef = ref(db, `students/${id}`);
+  const snapshot = await get(studentRef);
+  if (snapshot.exists()) {
+    return { id: snapshot.key, ...snapshot.val() } as Student;
+  }
+  return undefined;
 };
 
 interface StudentDataInput {
@@ -91,10 +45,7 @@ interface StudentDataInput {
   idProof?: File | string;
 }
 
-
 export const addStudent = async (studentData: StudentDataInput): Promise<Student> => {
-  await new Promise(resolve => setTimeout(resolve, 500));
-
   let finalPhotoUrl: string | undefined = undefined;
   if (typeof studentData.photo === 'string' && studentData.photo) {
     finalPhotoUrl = studentData.photo;
@@ -110,298 +61,366 @@ export const addStudent = async (studentData: StudentDataInput): Promise<Student
   }
   
   const { photo, idProof, ...restStudentData } = studentData;
+  
+  const newStudentRef = push(ref(db, 'students'));
+  const studentId = newStudentRef.key;
+  if (!studentId) throw new Error("Failed to generate student ID.");
 
-  const newStudent: Student = { 
-    ...restStudentData, 
-    id: String(Date.now()),
+  const newStudentData = { 
+    ...restStudentData,
+    id: studentId, // Store ID within the student object as well
     photoUrl: finalPhotoUrl,
     idProofUrl: finalIdProofUrl,
   };
-  
-  const currentStudents = [...mockStudents];
-  currentStudents.push(newStudent);
-  mockStudents = currentStudents; // Update the global mockStudents array
-  
-  if (newStudent.seatId) {
-    const seat = mockSeats.find(s => s.id === newStudent.seatId);
-    if (seat) {
-      if (seat.isOccupied) throw new Error(`Seat ${seat.seatNumber} (${seat.floor}) is already taken.`);
-      seat.isOccupied = true;
-      seat.studentId = newStudent.id;
-      seat.studentName = newStudent.fullName;
+
+  const updates: Record<string, any> = {};
+  updates[`/students/${studentId}`] = newStudentData;
+
+  if (newStudentData.seatId) {
+    const seatSnapshot = await get(ref(db, `seats/${newStudentData.seatId}`));
+    if (seatSnapshot.exists()) {
+        const seatVal = seatSnapshot.val();
+        if (seatVal.isOccupied) {
+            throw new Error(`Seat ${seatVal.seatNumber} (${seatVal.floor}) is already taken.`);
+        }
+        updates[`/seats/${newStudentData.seatId}/isOccupied`] = true;
+        updates[`/seats/${newStudentData.seatId}/studentId`] = studentId;
+        updates[`/seats/${newStudentData.seatId}/studentName`] = newStudentData.fullName;
     } else {
-      newStudent.seatId = undefined; 
+        newStudentData.seatId = undefined; // Seat not found
+        updates[`/students/${studentId}/seatId`] = null; // Remove invalid seatId
     }
   }
-  return {...newStudent};
+  await update(ref(db), updates);
+  return newStudentData as Student;
 };
 
 export const updateStudent = async (id: string, updates: Partial<StudentDataInput>): Promise<Student | undefined> => {
-  await new Promise(resolve => setTimeout(resolve, 500));
-  const studentIndex = mockStudents.findIndex(s => s.id === id);
-  if (studentIndex === -1) return undefined;
+  const studentRef = ref(db, `students/${id}`);
+  const studentSnapshot = await get(studentRef);
+  if (!studentSnapshot.exists()) return undefined;
 
-  const originalStudentData = { ...mockStudents[studentIndex] };
+  const originalStudentData = { id, ...studentSnapshot.val() } as Student;
   
   let finalPhotoUrl: string | undefined = originalStudentData.photoUrl;
-  if (updates.hasOwnProperty('photo')) { // Check if 'photo' key exists in updates
-    if (typeof updates.photo === 'string') {
-      finalPhotoUrl = updates.photo;
-    } else if (updates.photo instanceof File) {
-      finalPhotoUrl = `https://placehold.co/100x100.png?text=${encodeURIComponent(updates.photo.name.substring(0,10) || 'Photo')}`;
-    } else { // handles case where updates.photo is explicitly undefined or null (e.g. cleared file input)
-        finalPhotoUrl = undefined;
-    }
+  if (updates.hasOwnProperty('photo')) {
+    if (typeof updates.photo === 'string') finalPhotoUrl = updates.photo || undefined; // Allow clearing
+    else if (updates.photo instanceof File) finalPhotoUrl = `https://placehold.co/100x100.png?text=${encodeURIComponent(updates.photo.name.substring(0,10) || 'Photo')}`;
+    else finalPhotoUrl = undefined;
   }
 
   let finalIdProofUrl: string | undefined = originalStudentData.idProofUrl;
-   if (updates.hasOwnProperty('idProof')) { // Check if 'idProof' key exists
-    if (typeof updates.idProof === 'string') {
-      finalIdProofUrl = updates.idProof;
-    } else if (updates.idProof instanceof File) {
-      finalIdProofUrl = `https://placehold.co/200x150.png?text=${encodeURIComponent(updates.idProof.name.substring(0,10) || 'ID')}_ID`;
-    } else {
-        finalIdProofUrl = undefined;
-    }
+  if (updates.hasOwnProperty('idProof')) {
+    if (typeof updates.idProof === 'string') finalIdProofUrl = updates.idProof || undefined; // Allow clearing
+    else if (updates.idProof instanceof File) finalIdProofUrl = `https://placehold.co/200x150.png?text=${encodeURIComponent(updates.idProof.name.substring(0,10) || 'ID')}_ID`;
+    else finalIdProofUrl = undefined;
   }
 
   const { photo, idProof, ...restUpdates } = updates;
-
-  const updatedStudentData: Student = { 
+  
+  const updatedStudentData = { 
     ...originalStudentData, 
     ...restUpdates,
     photoUrl: finalPhotoUrl,
     idProofUrl: finalIdProofUrl,
   };
-  
-  const newSeatId = updatedStudentData.seatId;
+
+  const dbUpdates: Record<string, any> = {};
+  dbUpdates[`/students/${id}`] = updatedStudentData;
+
+  const newSeatId = updatedStudentData.seatId === 'NONE_SELECT_VALUE' ? undefined : updatedStudentData.seatId;
   const oldSeatId = originalStudentData.seatId;
 
-  // Only proceed with seat changes if seatId is actually different
   if (newSeatId !== oldSeatId) {
-    // Unassign from old seat if there was one
     if (oldSeatId) {
-      const oldSeat = mockSeats.find(s => s.id === oldSeatId);
-      if (oldSeat) {
-        oldSeat.isOccupied = false;
-        oldSeat.studentId = undefined;
-        oldSeat.studentName = undefined;
-      }
+      dbUpdates[`/seats/${oldSeatId}/isOccupied`] = false;
+      dbUpdates[`/seats/${oldSeatId}/studentId`] = null;
+      dbUpdates[`/seats/${oldSeatId}/studentName`] = null;
     }
-    // Assign to new seat if a new one is provided
     if (newSeatId) {
-      const newSeat = mockSeats.find(s => s.id === newSeatId);
-      if (!newSeat) {
-        console.error(`Seat with ID ${newSeatId} not found during student update. Student ${id} will not be assigned to this seat.`);
-        updatedStudentData.seatId = undefined; 
-      } else if (newSeat.isOccupied && newSeat.studentId !== id) { // Check if new seat is occupied by someone else
-        throw new Error(`Seat ${newSeat.seatNumber} (${newSeat.floor}) is already taken by ${newSeat.studentName}.`);
+      const newSeatSnapshot = await get(ref(db, `seats/${newSeatId}`));
+      if (newSeatSnapshot.exists()) {
+        const newSeatVal = newSeatSnapshot.val();
+        if (newSeatVal.isOccupied && newSeatVal.studentId !== id) {
+          throw new Error(`Seat ${newSeatVal.seatNumber} (${newSeatVal.floor}) is already taken by ${newSeatVal.studentName}.`);
+        }
+        dbUpdates[`/seats/${newSeatId}/isOccupied`] = true;
+        dbUpdates[`/seats/${newSeatId}/studentId`] = id;
+        dbUpdates[`/seats/${newSeatId}/studentName`] = updatedStudentData.fullName;
+        dbUpdates[`/students/${id}/seatId`] = newSeatId;
       } else {
-        newSeat.isOccupied = true;
-        newSeat.studentId = id;
-        newSeat.studentName = updatedStudentData.fullName;
+         dbUpdates[`/students/${id}/seatId`] = null; // New seat not found
       }
+    } else {
+        dbUpdates[`/students/${id}/seatId`] = null; // Unassigning seat
     }
+  } else if (updates.fullName && originalStudentData.seatId) {
+    // If only name changed and student has a seat, update studentName on seat
+    dbUpdates[`/seats/${originalStudentData.seatId}/studentName`] = updatedStudentData.fullName;
   }
-
-
-  const currentStudents = [...mockStudents];
-  currentStudents[studentIndex] = updatedStudentData;
-  mockStudents = currentStudents; // Update the global mockStudents array
-
-  return { ...mockStudents[studentIndex] };
+  
+  await update(ref(db), dbUpdates);
+  return updatedStudentData;
 };
 
 
+// Seat Operations
 export const getSeats = async (): Promise<Seat[]> => {
-  await new Promise(resolve => setTimeout(resolve, 200));
-  mockSeats.sort((a, b) => {
-    if (a.floor < b.floor) return -1;
-    if (a.floor > b.floor) return 1;
-    const aNum = parseInt(a.seatNumber.replace(/[^0-9]/g, ''), 10);
-    const bNum = parseInt(b.seatNumber.replace(/[^0-9]/g, ''), 10);
-    const aPrefix = a.seatNumber.replace(/[0-9]/g, '');
-    const bPrefix = b.seatNumber.replace(/[0-9]/g, '');
+  const seatsRef = ref(db, 'seats');
+  const snapshot = await get(seatsRef);
+  if (snapshot.exists()) {
+    const seatsArray = snapshotToAray(snapshot);
+    seatsArray.sort((a, b) => {
+        if (a.floor < b.floor) return -1;
+        if (a.floor > b.floor) return 1;
+        const aNum = parseInt(a.seatNumber.replace(/[^0-9]/g, ''), 10);
+        const bNum = parseInt(b.seatNumber.replace(/[^0-9]/g, ''), 10);
+        const aPrefix = a.seatNumber.replace(/[0-9]/g, '');
+        const bPrefix = b.seatNumber.replace(/[0-9]/g, '');
 
-    if (aPrefix === bPrefix && !isNaN(aNum) && !isNaN(bNum)) {
-        return aNum - bNum;
-    }
-    return a.seatNumber.localeCompare(b.seatNumber);
-  });
-  return mockSeats.map(s => ({...s}));
+        if (aPrefix === bPrefix && !isNaN(aNum) && !isNaN(bNum)) {
+            return aNum - bNum;
+        }
+        return a.seatNumber.localeCompare(b.seatNumber);
+    });
+    return seatsArray;
+  }
+  return [];
 };
 
 export const getSeatById = async (id: string): Promise<Seat | undefined> => {
-  await new Promise(resolve => setTimeout(resolve, 100));
-  const seat = mockSeats.find(s => s.id === id);
-  return seat ? {...seat} : undefined;
+  const seatRef = ref(db, `seats/${id}`);
+  const snapshot = await get(seatRef);
+  if (snapshot.exists()) {
+    return { id: snapshot.key, ...snapshot.val() } as Seat;
+  }
+  return undefined;
 };
 
 export const addSeat = async (seatData: { seatNumber: string; floor: string }): Promise<Seat> => {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const existing = mockSeats.find(s => s.seatNumber === seatData.seatNumber && s.floor === seatData.floor);
-  if (existing) {
-    throw new Error(`Seat ${seatData.seatNumber} already exists on ${seatData.floor}.`);
+  const seatsQuery = query(ref(db, 'seats'), orderByChild('floor'), equalTo(seatData.floor));
+  const snapshot = await get(seatsQuery);
+  if (snapshot.exists()) {
+    let seatExists = false;
+    snapshot.forEach(childSnap => {
+      if (childSnap.val().seatNumber === seatData.seatNumber) {
+        seatExists = true;
+      }
+    });
+    if (seatExists) {
+      throw new Error(`Seat ${seatData.seatNumber} already exists on ${seatData.floor}.`);
+    }
   }
+
+  const newSeatRef = push(ref(db, 'seats'));
+  const newSeatId = newSeatRef.key;
+  if (!newSeatId) throw new Error("Failed to generate seat ID.");
+
   const newSeat: Seat = {
-    id: `seat-${Date.now()}-${Math.random().toString(36).substring(2,7)}`,
+    id: newSeatId,
     seatNumber: seatData.seatNumber,
     floor: seatData.floor,
     isOccupied: false,
   };
-  mockSeats.push(newSeat);
-  return {...newSeat};
+  await set(newSeatRef, newSeat);
+  return newSeat;
 };
 
 export const updateSeatDetails = async (id: string, updates: { seatNumber?: string; floor?: string }): Promise<Seat | undefined> => {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const seatIndex = mockSeats.findIndex(s => s.id === id);
-  if (seatIndex === -1) return undefined;
+  const seatRef = ref(db, `seats/${id}`);
+  const seatSnapshot = await get(seatRef);
+  if (!seatSnapshot.exists()) return undefined;
 
-  const currentSeat = mockSeats[seatIndex];
+  const currentSeat = { id, ...seatSnapshot.val() } as Seat;
   const newSeatNumber = updates.seatNumber || currentSeat.seatNumber;
   const newFloor = updates.floor || currentSeat.floor;
 
   if (newSeatNumber !== currentSeat.seatNumber || newFloor !== currentSeat.floor) {
-    const existing = mockSeats.find(s => s.id !== id && s.seatNumber === newSeatNumber && s.floor === newFloor);
-    if (existing) {
-      throw new Error(`Another seat with number ${newSeatNumber} already exists on ${newFloor}.`);
+    const seatsQuery = query(ref(db, 'seats'), orderByChild('floor'), equalTo(newFloor));
+    const snapshot = await get(seatsQuery);
+    if (snapshot.exists()) {
+        let seatExists = false;
+        snapshot.forEach(childSnap => {
+            if (childSnap.key !== id && childSnap.val().seatNumber === newSeatNumber) {
+            seatExists = true;
+            }
+        });
+        if (seatExists) {
+            throw new Error(`Another seat with number ${newSeatNumber} already exists on ${newFloor}.`);
+        }
     }
   }
-  
-  mockSeats[seatIndex] = { ...currentSeat, ...updates };
-  if (mockSeats[seatIndex].isOccupied && mockSeats[seatIndex].studentId) {
-      const student = mockStudents.find(s => s.id === mockSeats[seatIndex].studentId);
-      if (student) {
-          mockSeats[seatIndex].studentName = student.fullName;
-      }
-  }
-  return {...mockSeats[seatIndex]};
+
+  const finalUpdates = { ...currentSeat, ...updates };
+  await set(seatRef, finalUpdates);
+  return finalUpdates;
 };
 
 export const deleteSeat = async (id: string): Promise<boolean> => {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const seatIndex = mockSeats.findIndex(s => s.id === id);
-  if (seatIndex === -1) return false;
+  const seatRef = ref(db, `seats/${id}`);
+  const seatSnapshot = await get(seatRef);
+  if (!seatSnapshot.exists()) return false;
   
-  const seatToDelete = mockSeats[seatIndex];
+  const seatToDelete = seatSnapshot.val() as Seat;
+  const updates: Record<string, any> = {};
+  updates[`/seats/${id}`] = null; // Delete seat
+
   if (seatToDelete.isOccupied && seatToDelete.studentId) {
-    const student = mockStudents.find(s => s.id === seatToDelete.studentId);
-    if (student) {
-      student.seatId = undefined;
-    }
+    updates[`/students/${seatToDelete.studentId}/seatId`] = null; // Unassign student
   }
-  mockSeats.splice(seatIndex, 1);
+  await update(ref(db), updates);
   return true;
 };
 
 export const assignSeat = async (studentId: string, newSeatId: string): Promise<boolean> => {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const student = mockStudents.find(s => s.id === studentId);
-  const newSeat = mockSeats.find(s => s.id === newSeatId);
+  const studentRef = ref(db, `students/${studentId}`);
+  const newSeatRef = ref(db, `seats/${newSeatId}`);
 
-  if (!student || !newSeat) return false;
+  const studentSnap = await get(studentRef);
+  const newSeatSnap = await get(newSeatRef);
+
+  if (!studentSnap.exists() || !newSeatSnap.exists()) return false;
+
+  const student = {id: studentSnap.key, ...studentSnap.val()} as Student;
+  const newSeat = {id: newSeatSnap.key, ...newSeatSnap.val()} as Seat;
+
   if (newSeat.isOccupied && newSeat.studentId !== studentId) { 
       throw new Error(`Seat ${newSeat.seatNumber} (${newSeat.floor}) is already taken by ${newSeat.studentName}.`);
   }
 
-  if (student.seatId && student.seatId !== newSeatId) {
-    const oldSeat = mockSeats.find(s => s.id === student.seatId);
-    if (oldSeat) {
-      oldSeat.isOccupied = false;
-      oldSeat.studentId = undefined;
-      oldSeat.studentName = undefined;
-    }
+  const updates: Record<string, any> = {};
+  if (student.seatId && student.seatId !== newSeatId) { // Student had an old seat
+    updates[`/seats/${student.seatId}/isOccupied`] = false;
+    updates[`/seats/${student.seatId}/studentId`] = null;
+    updates[`/seats/${student.seatId}/studentName`] = null;
   }
   
-  newSeat.isOccupied = true;
-  newSeat.studentId = studentId;
-  newSeat.studentName = student.fullName;
-  student.seatId = newSeat.id;
+  updates[`/seats/${newSeatId}/isOccupied`] = true;
+  updates[`/seats/${newSeatId}/studentId`] = studentId;
+  updates[`/seats/${newSeatId}/studentName`] = student.fullName;
+  updates[`/students/${studentId}/seatId`] = newSeatId;
+  
+  await update(ref(db), updates);
   return true;
 };
 
 export const unassignSeat = async (seatId: string): Promise<boolean> => {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const seat = mockSeats.find(s => s.id === seatId);
-  if (!seat || !seat.isOccupied || !seat.studentId) return false;
+  const seatRef = ref(db, `seats/${seatId}`);
+  const seatSnapshot = await get(seatRef);
+  if (!seatSnapshot.exists()) return false;
 
-  const student = mockStudents.find(s => s.id === seat.studentId);
-  if (student) {
-    student.seatId = undefined;
-  }
+  const seat = {id: seatSnapshot.key, ...seatSnapshot.val()} as Seat;
+  if (!seat.isOccupied || !seat.studentId) return false; // Already vacant or no student assigned
 
-  seat.isOccupied = false;
-  seat.studentId = undefined;
-  seat.studentName = undefined;
+  const updates: Record<string, any> = {};
+  updates[`/seats/${seatId}/isOccupied`] = false;
+  updates[`/seats/${seatId}/studentId`] = null;
+  updates[`/seats/${seatId}/studentName`] = null;
+  updates[`/students/${seat.studentId}/seatId`] = null;
+
+  await update(ref(db), updates);
   return true;
 };
 
-
+// Payment Type Operations
 export const getPaymentTypes = async (): Promise<PaymentType[]> => {
-  await new Promise(resolve => setTimeout(resolve, 200));
-  return mockPaymentTypes.map(fp => ({...fp}));
+  const paymentTypesRef = ref(db, 'paymentTypes');
+  const snapshot = await get(paymentTypesRef);
+  if (snapshot.exists()) {
+    return snapshotToAray(snapshot);
+  }
+  return [];
 }
 
 export const getPaymentTypeById = async (id: string): Promise<PaymentType | undefined> => {
-    await new Promise(resolve => setTimeout(resolve, 100));
-    const plan = mockPaymentTypes.find(p => p.id === id);
-    return plan ? {...plan} : undefined;
+    const ptRef = ref(db, `paymentTypes/${id}`);
+    const snapshot = await get(ptRef);
+    if (snapshot.exists()) {
+        return { id: snapshot.key, ...snapshot.val() } as PaymentType;
+    }
+    return undefined;
 };
 
-export const addPaymentType = async (plan: Omit<PaymentType, 'id'>): Promise<PaymentType> => {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const newPlan : PaymentType = {...plan, id: String(Date.now())};
-  mockPaymentTypes.push(newPlan);
-  return {...newPlan};
+export const addPaymentType = async (planData: Omit<PaymentType, 'id'>): Promise<PaymentType> => {
+  const newPaymentTypeRef = push(ref(db, 'paymentTypes'));
+  const newId = newPaymentTypeRef.key;
+  if (!newId) throw new Error("Failed to generate payment type ID.");
+  const newPlan : PaymentType = {...planData, id: newId};
+  await set(newPaymentTypeRef, newPlan);
+  return newPlan;
 }
 
 export const updatePaymentType = async (id: string, updates: Partial<PaymentType>): Promise<PaymentType | undefined> => {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const planIndex = mockPaymentTypes.findIndex(p => p.id === id);
-  if (planIndex === -1) return undefined;
-  mockPaymentTypes[planIndex] = {...mockPaymentTypes[planIndex], ...updates};
-  return {...mockPaymentTypes[planIndex]};
+  const ptRef = ref(db, `paymentTypes/${id}`);
+  const snapshot = await get(ptRef);
+  if (!snapshot.exists()) return undefined;
+  const updatedData = { ...snapshot.val(), ...updates, id: id };
+  await set(ptRef, updatedData);
+  return updatedData as PaymentType;
 }
 
+// Fee Payment Operations
 export const getPayments = async (): Promise<FeePayment[]> => {
-  await new Promise(resolve => setTimeout(resolve, 200));
-  return mockPayments.map(p => ({...p}));
+  const paymentsRef = ref(db, 'payments');
+  const snapshot = await get(paymentsRef);
+  if (snapshot.exists()) {
+    return snapshotToAray(snapshot);
+  }
+  return [];
 }
 
-export const addPayment = async (payment: Omit<FeePayment, 'id' | 'studentName'>): Promise<FeePayment> => {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const student = mockStudents.find(s => s.id === payment.studentId);
-  if (!student) throw new Error("Student not found");
-
-  const newPayment: FeePayment = { ...payment, id: String(Date.now()), studentName: student.fullName };
-  mockPayments.push(newPayment);
+export const addPayment = async (paymentData: Omit<FeePayment, 'id' | 'studentName'>): Promise<FeePayment> => {
+  const studentRef = ref(db, `students/${paymentData.studentId}`);
+  const studentSnapshot = await get(studentRef);
+  if (!studentSnapshot.exists()) throw new Error("Student not found");
   
-  student.feesDue = Math.max(0, student.feesDue - payment.amount);
-  if (student.feesDue === 0 && student.status === 'owing') {
-    student.status = 'enrolled';
+  const student = {id: studentSnapshot.key, ...studentSnapshot.val()} as Student;
+
+  const newPaymentRef = push(ref(db, 'payments'));
+  const newPaymentId = newPaymentRef.key;
+  if (!newPaymentId) throw new Error("Failed to generate payment ID.");
+
+  const newPayment: FeePayment = { ...paymentData, id: newPaymentId, studentName: student.fullName };
+  
+  const updates: Record<string, any> = {};
+  updates[`/payments/${newPaymentId}`] = newPayment;
+  
+  const newFeesDue = Math.max(0, student.feesDue - paymentData.amount);
+  updates[`/students/${student.id}/feesDue`] = newFeesDue;
+  updates[`/students/${student.id}/lastPaymentDate`] = paymentData.paymentDate;
+  if (newFeesDue === 0 && student.status === 'owing') {
+    updates[`/students/${student.id}/status`] = 'enrolled';
   }
-  student.lastPaymentDate = newPayment.paymentDate;
-  return {...newPayment};
+  
+  await update(ref(db), updates);
+  return newPayment;
 }
 
 export const markFeesAsPaid = async (studentId: string): Promise<boolean> => {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const student = mockStudents.find(s => s.id === studentId);
-  if (!student) return false;
-  student.feesDue = 0;
+  const studentRef = ref(db, `students/${studentId}`);
+  const studentSnapshot = await get(studentRef);
+  if (!studentSnapshot.exists()) return false;
+
+  const student = {id: studentSnapshot.key, ...studentSnapshot.val()} as Student;
+  const updates: Record<string, any> = {};
+  updates[`/students/${studentId}/feesDue`] = 0;
+  updates[`/students/${studentId}/lastPaymentDate`] = new Date().toISOString().split('T')[0];
   if (student.status === 'owing') {
-    student.status = 'enrolled';
+    updates[`/students/${studentId}/status`] = 'enrolled';
   }
-  student.lastPaymentDate = new Date().toISOString().split('T')[0]; 
+  
+  await update(ref(db), updates);
   return true;
 }
 
-
+// Dashboard Summary
 export const getDashboardSummary = async (): Promise<DashboardSummary> => {
-  await new Promise(resolve => setTimeout(resolve, 100));
-  const activeStudents = mockStudents.filter(s => s.status !== 'inactive');
-  const totalIncomeThisMonth = mockPayments.reduce((sum, p) => {
+  const students = await getStudents();
+  const seats = await getSeats();
+  const payments = await getPayments();
+
+  const activeStudents = students.filter(s => s.status !== 'inactive');
+  const totalIncomeThisMonth = payments.reduce((sum, p) => {
       const paymentDate = new Date(p.paymentDate);
       const currentDate = new Date();
       if (paymentDate.getFullYear() === currentDate.getFullYear() && paymentDate.getMonth() === currentDate.getMonth()) {
@@ -412,11 +431,9 @@ export const getDashboardSummary = async (): Promise<DashboardSummary> => {
 
   return {
     totalStudents: activeStudents.length,
-    totalSeats: mockSeats.length,
-    availableSeats: mockSeats.filter(s => !s.isOccupied).length,
+    totalSeats: seats.length,
+    availableSeats: seats.filter(s => !s.isOccupied).length,
     monthlyIncome: totalIncomeThisMonth,
     studentsWithDues: activeStudents.filter(s => s.feesDue > 0).length,
   };
-}
-
-    
+};
