@@ -4,103 +4,79 @@
 import type { ReactNode } from 'react';
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { db } from '@/lib/firebase'; 
-import { ref, get, set } from 'firebase/database'; 
+import { auth } from '@/lib/firebase'; 
+import { 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged, 
+  type User 
+} from 'firebase/auth';
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  login: (password: string) => Promise<boolean>;
+  user: User | null;
+  login: (email: string, password_input: string) => Promise<boolean>; // Renamed password to password_input
   logout: () => void;
   loading: boolean;
-  updateAdminPassword: (newPassword: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const ADMIN_PASSWORD_PATH = '/config/adminPassword';
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    const storedAuth = localStorage.getItem('seatSmartAuth');
-    if (storedAuth === 'true') {
-      setIsAuthenticated(true);
-    }
-    setLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    return () => unsubscribe(); // Cleanup subscription on unmount
   }, []);
 
+  const isAuthenticated = !!user;
+
   useEffect(() => {
-    if (!loading && !isAuthenticated && pathname !== '/login') {
-      router.push('/login');
-    } else if (!loading && isAuthenticated && pathname === '/login') {
-      router.push('/dashboard');
+    if (!loading) {
+      if (!isAuthenticated && pathname !== '/login') {
+        router.push('/login');
+      } else if (isAuthenticated && pathname === '/login') {
+        router.push('/dashboard');
+      }
     }
   }, [isAuthenticated, loading, pathname, router]);
 
-  const login = async (passwordInput: string): Promise<boolean> => {
+  const login = async (email: string, password_input: string): Promise<boolean> => {
     setLoading(true);
     try {
-      const passwordRef = ref(db, ADMIN_PASSWORD_PATH);
-      const snapshot = await get(passwordRef);
-      
-      let storedPassword = null;
-      if (snapshot.exists()) {
-        storedPassword = snapshot.val();
-      } else {
-        console.warn(`Admin password not found at ${ADMIN_PASSWORD_PATH} in Firebase. Login will fail. Please set it in your Realtime Database.`);
-        // If not set in DB, use a default temporary password for first setup, e.g. 'password123'
-        // This is a fallback, ideally it should be set in DB.
-        if (passwordInput === 'password123') {
-            setIsAuthenticated(true);
-            localStorage.setItem('seatSmartAuth', 'true');
-            // Optionally set this password in DB if it's the first login
-            // await set(passwordRef, 'password123');
-            router.push('/dashboard');
-            setLoading(false);
-            return true;
-        }
-      }
-
-      if (typeof storedPassword === 'string' && passwordInput === storedPassword) {
-        setIsAuthenticated(true);
-        localStorage.setItem('seatSmartAuth', 'true');
-        router.push('/dashboard');
-        setLoading(false);
-        return true;
-      }
-    } catch (error) {
-      console.error("Error fetching admin password from Firebase:", error);
-    }
-    
-    setIsAuthenticated(false);
-    localStorage.removeItem('seatSmartAuth');
-    setLoading(false);
-    return false;
-  };
-
-  const logout = () => {
-    setIsAuthenticated(false);
-    localStorage.removeItem('seatSmartAuth');
-    router.push('/login');
-  };
-
-  const updateAdminPassword = async (newPassword: string): Promise<boolean> => {
-    try {
-      const passwordRef = ref(db, ADMIN_PASSWORD_PATH);
-      await set(passwordRef, newPassword);
+      await signInWithEmailAndPassword(auth, email, password_input);
+      // onAuthStateChanged will handle setting user and navigating
+      setLoading(false);
       return true;
     } catch (error) {
-      console.error("Error updating admin password in Firebase:", error);
+      console.error("Firebase Authentication Error:", error);
+      setLoading(false);
       return false;
     }
   };
 
+  const logout = async () => {
+    setLoading(true);
+    try {
+      await signOut(auth);
+      // onAuthStateChanged will handle setting user to null and navigating
+      router.push('/login');
+    } catch (error) {
+      console.error("Error signing out:", error);
+    } finally {
+        setLoading(false);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout, loading, updateAdminPassword }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, login, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );
@@ -113,4 +89,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
