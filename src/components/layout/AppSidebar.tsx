@@ -23,6 +23,7 @@ import {
   LogOut,
   Settings,
   BookOpenCheck,
+  Library, // Added for Manage Libraries
 } from 'lucide-react';
 
 const navItems = [
@@ -32,6 +33,7 @@ const navItems = [
   { href: '/fees', label: 'Fee Collection', icon: DollarSign },
   { href: '/reports', label: 'Statements', icon: FileText },
   { href: '/fee-plans', label: 'Payment Types', icon: ListChecks },
+  { href: '/manage-libraries', label: 'Manage Libraries', icon: Library }, // New Item
 ];
 
 export function AppSidebar() {

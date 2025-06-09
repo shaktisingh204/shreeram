@@ -1,5 +1,12 @@
 
 {
+  "libraries_metadata": {
+    "library_main": {
+      "id": "library_main",
+      "name": "Main Library (Default)",
+      "createdAt": "2024-01-01T00:00:00.000Z"
+    }
+  },
   "libraries": {
     "library_main": {
       "students": {
@@ -157,6 +164,6 @@
     }
   },
   "config": {
-    "adminPassword": "password123"
+    "adminPassword": "password123" 
   }
 }

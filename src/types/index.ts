@@ -49,3 +49,9 @@ export interface DashboardSummary {
   monthlyIncome: number; // Monthly Earnings
   studentsWithDues: number; // Renamed from feesDueToday
 }
+
+export interface LibraryMetadata {
+  id: string;
+  name: string;
+  createdAt: string; // ISO date string
+}

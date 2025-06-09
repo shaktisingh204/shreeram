@@ -1,7 +1,7 @@
 
 import { db } from './firebase';
 import { ref, get, set, push, child, update, remove, query, orderByChild, equalTo } from 'firebase/database';
-import type { Student, Seat, PaymentType, FeePayment, DashboardSummary } from '@/types';
+import type { Student, Seat, PaymentType, FeePayment, DashboardSummary, LibraryMetadata } from '@/types';
 
 // Helper function to convert Firebase snapshot to array
 const snapshotToAray = (snapshot: any) => {
@@ -12,7 +12,41 @@ const snapshotToAray = (snapshot: any) => {
   return items;
 };
 
-const ACTIVE_LIBRARY_ID = "library_main"; // This will be used to namespace data
+const ACTIVE_LIBRARY_ID = "library_main"; // This will be used to namespace data. TODO: Make this dynamic based on user's selected library
+
+// Library Metadata Operations
+export const getLibrariesMetadata = async (): Promise<LibraryMetadata[]> => {
+  const librariesMetaRef = ref(db, `libraries_metadata`);
+  const snapshot = await get(librariesMetaRef);
+  if (snapshot.exists()) {
+    return snapshotToAray(snapshot).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+  return [];
+};
+
+export const addLibraryMetadata = async (name: string): Promise<LibraryMetadata> => {
+  const newLibraryMetaRef = push(ref(db, `libraries_metadata`));
+  const newLibraryId = newLibraryMetaRef.key;
+  if (!newLibraryId) throw new Error("Failed to generate library ID.");
+
+  const newLibrary: LibraryMetadata = {
+    id: newLibraryId,
+    name: name,
+    createdAt: new Date().toISOString(),
+  };
+  
+  const updates: Record<string, any> = {};
+  updates[`libraries_metadata/${newLibraryId}`] = newLibrary;
+  // Create empty nodes for the new library's data structure
+  updates[`libraries/${newLibraryId}/students`] = {};
+  updates[`libraries/${newLibraryId}/seats`] = {};
+  updates[`libraries/${newLibraryId}/paymentTypes`] = {};
+  updates[`libraries/${newLibraryId}/payments`] = {};
+  
+  await update(ref(db), updates);
+  return newLibrary;
+};
+
 
 // Student Operations
 export const getStudents = async (): Promise<Student[]> => {

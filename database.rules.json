@@ -1,38 +1,46 @@
 
 {
   "rules": {
+    "libraries_metadata": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$libraryMetaId": {
+        ".validate": "newData.hasChildren(['id', 'name', 'createdAt']) && newData.child('id').isString() && newData.child('name').isString() && newData.child('createdAt').isString()"
+      },
+      ".indexOn": ["createdAt"]
+    },
     "libraries": {
       "$libraryId": {
         "students": {
-          ".read": true,
-          ".write": true,
+          ".read": "auth != null",
+          ".write": "auth != null",
           // Example validation for student data:
           // "$studentId": {
           //   ".validate": "newData.hasChildren(['fullName', 'contactDetails', 'status', 'feesDue', 'enrollmentDate']) && newData.child('fullName').isString() && newData.child('contactDetails').isString() && newData.child('status').isString() && newData.child('feesDue').isNumber() && newData.child('enrollmentDate').isString() && (!newData.hasChild('mobileNumber') || newData.child('mobileNumber').isString()) && (!newData.hasChild('fatherName') || newData.child('fatherName').isString()) && (!newData.hasChild('address') || newData.child('address').isString()) && (!newData.hasChild('photoUrl') || newData.child('photoUrl').isString()) && (!newData.hasChild('idProofUrl') || newData.child('idProofUrl').isString()) && (!newData.hasChild('notes') || newData.child('notes').isString()) && (!newData.hasChild('seatId') || newData.child('seatId').isString()) && (!newData.hasChild('paymentTypeId') || newData.child('paymentTypeId').isString())"
           // }
           // Example index for students if you query by status or name:
-          // ".indexOn": ["status", "fullName"]
+           ".indexOn": ["status", "fullName"]
         },
         "seats": {
-          ".read": true,
-          ".write": true,
-          ".indexOn": ["floor", "seatNumber"] // Indexing for floor and seatNumber
+          ".read": "auth != null",
+          ".write": "auth != null",
+          ".indexOn": ["floor", "seatNumber"], // Indexing for floor and seatNumber
           // Example validation for seat data:
           // "$seatId": {
           //   ".validate": "newData.hasChildren(['seatNumber', 'floor', 'isOccupied']) && newData.child('seatNumber').isString() && newData.child('floor').isString() && newData.child('isOccupied').isBoolean() && (!newData.hasChild('studentId') || newData.child('studentId').isString()) && (!newData.hasChild('studentName') || newData.child('studentName').isString())"
           // }
         },
         "paymentTypes": {
-          ".read": true,
-          ".write": true
+          ".read": "auth != null",
+          ".write": "auth != null"
           // Example validation for payment type data:
           // "$paymentTypeId": {
           //   ".validate": "newData.hasChildren(['name', 'amount', 'frequency']) && newData.child('name').isString() && newData.child('amount').isNumber() && newData.child('frequency').isString()"
           // }
         },
         "payments": {
-          ".read": true,
-          ".write": true
+          ".read": "auth != null",
+          ".write": "auth != null"
           // Example validation for payment data:
           // "$paymentId": {
           //   ".validate": "newData.hasChildren(['studentId', 'amount', 'paymentDate']) && newData.child('studentId').isString() && newData.child('amount').isNumber() && newData.child('paymentDate').isString() && (!newData.hasChild('studentName') || newData.child('studentName').isString()) && (!newData.hasChild('notes') || newData.child('notes').isString())"
@@ -42,8 +50,8 @@
     },
     "config": {
       "adminPassword": {
-        ".read": true, // Be cautious with read access in production
-        ".write": true // Allows the settings page to update the password
+        ".read": true, // This was for the old password system, keeping for now if any part still uses it, but ideally should be removed or secured with auth.
+        ".write": "auth != null" // Should also be secured properly.
       }
     }
   }
