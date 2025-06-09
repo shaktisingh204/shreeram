@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Edit, DollarSign, Loader2, User, Mail, StickyNote, Armchair, CalendarDays, Briefcase } from 'lucide-react';
+import { ArrowLeft, Edit, DollarSign, Loader2, User, Mail, StickyNote, Armchair, CalendarDays, Briefcase, Phone, Home, UserCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -22,7 +22,7 @@ export default function StudentDetailPage() {
   const [student, setStudent] = useState<Student | null>(null);
   const [assignedSeat, setAssignedSeat] = useState<Seat | null>(null);
   const [payments, setPayments] = useState<FeePayment[]>([]);
-  const [paymentType, setPaymentType] = useState<PaymentType | null>(null); // Renamed from feePlan
+  const [paymentType, setPaymentType] = useState<PaymentType | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -47,9 +47,9 @@ export default function StudentDetailPage() {
           const paymentData = await getPayments(); 
           setPayments(paymentData.filter(p => p.studentId === studentId));
 
-          if (studentData.paymentTypeId) { // Renamed from feePlanId
-            const planData = await getPaymentTypeById(studentData.paymentTypeId); // Renamed function
-            if (planData) setPaymentType(planData); // Renamed state setter
+          if (studentData.paymentTypeId) { 
+            const planData = await getPaymentTypeById(studentData.paymentTypeId); 
+            if (planData) setPaymentType(planData); 
           }
 
         } catch (error) {
@@ -65,8 +65,8 @@ export default function StudentDetailPage() {
   const getStatusBadgeVariant = (status: Student['status'] | undefined) => {
     if (!status) return 'outline';
     switch (status) {
-      case 'enrolled': return 'default'; // 'active' could be an alternative if desired
-      case 'owing': return 'destructive'; // 'hasDues' could be an alternative
+      case 'enrolled': return 'default';
+      case 'owing': return 'destructive';
       case 'inactive': return 'secondary';
       default: return 'outline';
     }
@@ -105,29 +105,32 @@ export default function StudentDetailPage() {
           </Avatar>
           <div className="flex-1">
             <CardTitle className="text-3xl font-headline text-primary">{student.fullName}</CardTitle>
+            {student.fatherName && <p className="text-sm text-muted-foreground">S/o {student.fatherName}</p>}
             <Badge variant={getStatusBadgeVariant(student.status)} className="capitalize mt-1 text-sm">
               {student.status === 'owing' ? 'Has Dues' : student.status}
             </Badge>
           </div>
         </CardHeader>
-        <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-foreground border-b pb-2 mb-2">Student Details</h3>
+        <CardContent className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="space-y-4 md:col-span-2">
+            <h3 className="text-lg font-semibold text-foreground border-b pb-2 mb-3">Contact & Personal Info</h3>
             <InfoItem icon={Mail} label="Contact Email" value={student.contactDetails} />
+            {student.mobileNumber && <InfoItem icon={Phone} label="Mobile Number" value={student.mobileNumber} />}
+            {student.address && <InfoItem icon={Home} label="Address" value={student.address} />}
             <InfoItem icon={CalendarDays} label="Joined On" value={new Date(student.enrollmentDate).toLocaleDateString()} />
             {assignedSeat && <InfoItem icon={Armchair} label="Assigned Seat" value={`${assignedSeat.seatNumber} (Floor: ${assignedSeat.floor})`} />}
             {student.notes && <InfoItem icon={StickyNote} label="Notes" value={student.notes} />}
           </div>
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-foreground border-b pb-2 mb-2">Fee Details</h3>
+          <div className="space-y-4 md:col-span-1">
+            <h3 className="text-lg font-semibold text-foreground border-b pb-2 mb-3">Fee Details</h3>
             <InfoItem icon={DollarSign} label="Amount to Pay" value={`INR${student.feesDue.toFixed(2)}`} className={student.feesDue > 0 ? "text-destructive font-bold" : ""} />
             {student.lastPaymentDate && <InfoItem icon={CalendarDays} label="Last Payment" value={new Date(student.lastPaymentDate).toLocaleDateString()} />}
             {paymentType && <InfoItem icon={Briefcase} label="Payment Type" value={`${paymentType.name} (INR${paymentType.amount}/${paymentType.frequency})`} />}
           </div>
            {student.idProofUrl && (
-            <div className="md:col-span-2 space-y-2">
-                 <h3 className="text-lg font-semibold text-foreground border-b pb-2 mb-2">ID Proof</h3>
-                <a href={student.idProofUrl} target="_blank" rel="noopener noreferrer" className="block w-full md:w-1/2">
+            <div className="md:col-span-3 space-y-2 pt-4 border-t">
+                 <h3 className="text-lg font-semibold text-foreground pb-2 mb-2">ID Proof</h3>
+                <a href={student.idProofUrl} target="_blank" rel="noopener noreferrer" className="block w-full md:w-1/3">
                     <Image src={student.idProofUrl} alt="ID Proof" width={400} height={300} className="rounded-md object-cover border hover:opacity-80 transition-opacity" data-ai-hint="identification document" />
                 </a>
             </div>

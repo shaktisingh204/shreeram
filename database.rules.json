@@ -3,10 +3,10 @@
   "rules": {
     "students": {
       ".read": true,
-      ".write": true
+      ".write": true,
       // Example validation for student data:
       // "$studentId": {
-      //   ".validate": "newData.hasChildren(['fullName', 'contactDetails', 'status', 'feesDue', 'enrollmentDate']) && newData.child('fullName').isString() && newData.child('feesDue').isNumber()"
+      //   ".validate": "newData.hasChildren(['fullName', 'contactDetails', 'status', 'feesDue', 'enrollmentDate']) && newData.child('fullName').isString() && newData.child('contactDetails').isString() && newData.child('status').isString() && newData.child('feesDue').isNumber() && newData.child('enrollmentDate').isString() && (!newData.hasChild('mobileNumber') || newData.child('mobileNumber').isString()) && (!newData.hasChild('fatherName') || newData.child('fatherName').isString()) && (!newData.hasChild('address') || newData.child('address').isString()) && (!newData.hasChild('photoUrl') || newData.child('photoUrl').isString()) && (!newData.hasChild('idProofUrl') || newData.child('idProofUrl').isString()) && (!newData.hasChild('notes') || newData.child('notes').isString()) && (!newData.hasChild('seatId') || newData.child('seatId').isString()) && (!newData.hasChild('paymentTypeId') || newData.child('paymentTypeId').isString())"
       // }
       // Example index for students if you query by status or name:
       // ".indexOn": ["status", "fullName"]
@@ -17,7 +17,7 @@
       ".indexOn": ["floor", "seatNumber"] // Indexing for floor and seatNumber
       // Example validation for seat data:
       // "$seatId": {
-      //   ".validate": "newData.hasChildren(['seatNumber', 'floor', 'isOccupied']) && newData.child('seatNumber').isString() && newData.child('floor').isString() && newData.child('isOccupied').isBoolean()"
+      //   ".validate": "newData.hasChildren(['seatNumber', 'floor', 'isOccupied']) && newData.child('seatNumber').isString() && newData.child('floor').isString() && newData.child('isOccupied').isBoolean() && (!newData.hasChild('studentId') || newData.child('studentId').isString()) && (!newData.hasChild('studentName') || newData.child('studentName').isString())"
       // }
     },
     "paymentTypes": {
@@ -33,12 +33,12 @@
       ".write": true
       // Example validation for payment data:
       // "$paymentId": {
-      //   ".validate": "newData.hasChildren(['studentId', 'amount', 'paymentDate']) && newData.child('studentId').isString() && newData.child('amount').isNumber() && newData.child('paymentDate').isString()"
+      //   ".validate": "newData.hasChildren(['studentId', 'amount', 'paymentDate']) && newData.child('studentId').isString() && newData.child('amount').isNumber() && newData.child('paymentDate').isString() && (!newData.hasChild('studentName') || newData.child('studentName').isString()) && (!newData.hasChild('notes') || newData.child('notes').isString())"
       // }
     },
     "config": {
       "adminPassword": {
-        ".read": true,
+        ".read": true, // Be cautious with read access in production
         ".write": true // Allows the settings page to update the password
       }
     }

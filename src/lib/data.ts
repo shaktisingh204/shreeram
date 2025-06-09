@@ -34,7 +34,10 @@ export const getStudentById = async (id: string): Promise<Student | undefined> =
 
 interface StudentDataInput {
   fullName: string;
-  contactDetails: string;
+  contactDetails: string; // Email
+  mobileNumber?: string;
+  fatherName?: string;
+  address?: string;
   notes?: string;
   seatId?: string;
   status: 'enrolled' | 'owing' | 'inactive';
@@ -66,33 +69,42 @@ export const addStudent = async (studentData: StudentDataInput): Promise<Student
   const studentId = newStudentRef.key;
   if (!studentId) throw new Error("Failed to generate student ID.");
 
-  const newStudentData = { 
+  const newStudentData: Omit<Student, 'id'> & { id?: string } = {
     ...restStudentData,
-    id: studentId, // Store ID within the student object as well
     photoUrl: finalPhotoUrl,
     idProofUrl: finalIdProofUrl,
+    // Ensure all new fields are included, defaulting to null/undefined if not provided
+    mobileNumber: studentData.mobileNumber || undefined,
+    fatherName: studentData.fatherName || undefined,
+    address: studentData.address || undefined,
   };
+  
+  const studentToSave: Student = {
+    ...newStudentData,
+    id: studentId,
+  } as Student;
+
 
   const updates: Record<string, any> = {};
-  updates[`/students/${studentId}`] = newStudentData;
+  updates[`/students/${studentId}`] = studentToSave;
 
-  if (newStudentData.seatId) {
-    const seatSnapshot = await get(ref(db, `seats/${newStudentData.seatId}`));
+  if (studentToSave.seatId) {
+    const seatSnapshot = await get(ref(db, `seats/${studentToSave.seatId}`));
     if (seatSnapshot.exists()) {
         const seatVal = seatSnapshot.val();
         if (seatVal.isOccupied) {
             throw new Error(`Seat ${seatVal.seatNumber} (${seatVal.floor}) is already taken.`);
         }
-        updates[`/seats/${newStudentData.seatId}/isOccupied`] = true;
-        updates[`/seats/${newStudentData.seatId}/studentId`] = studentId;
-        updates[`/seats/${newStudentData.seatId}/studentName`] = newStudentData.fullName;
+        updates[`/seats/${studentToSave.seatId}/isOccupied`] = true;
+        updates[`/seats/${studentToSave.seatId}/studentId`] = studentId;
+        updates[`/seats/${studentToSave.seatId}/studentName`] = studentToSave.fullName;
     } else {
-        newStudentData.seatId = undefined; // Seat not found
-        updates[`/students/${studentId}/seatId`] = null; // Remove invalid seatId
+        studentToSave.seatId = undefined; 
+        updates[`/students/${studentId}/seatId`] = null; 
     }
   }
   await update(ref(db), updates);
-  return newStudentData as Student;
+  return studentToSave;
 };
 
 export const updateStudent = async (id: string, updates: Partial<StudentDataInput>): Promise<Student | undefined> => {
@@ -104,25 +116,29 @@ export const updateStudent = async (id: string, updates: Partial<StudentDataInpu
   
   let finalPhotoUrl: string | undefined = originalStudentData.photoUrl;
   if (updates.hasOwnProperty('photo')) {
-    if (typeof updates.photo === 'string') finalPhotoUrl = updates.photo || undefined; // Allow clearing
+    if (typeof updates.photo === 'string') finalPhotoUrl = updates.photo || undefined;
     else if (updates.photo instanceof File) finalPhotoUrl = `https://placehold.co/100x100.png?text=${encodeURIComponent(updates.photo.name.substring(0,10) || 'Photo')}`;
     else finalPhotoUrl = undefined;
   }
 
   let finalIdProofUrl: string | undefined = originalStudentData.idProofUrl;
   if (updates.hasOwnProperty('idProof')) {
-    if (typeof updates.idProof === 'string') finalIdProofUrl = updates.idProof || undefined; // Allow clearing
+    if (typeof updates.idProof === 'string') finalIdProofUrl = updates.idProof || undefined;
     else if (updates.idProof instanceof File) finalIdProofUrl = `https://placehold.co/200x150.png?text=${encodeURIComponent(updates.idProof.name.substring(0,10) || 'ID')}_ID`;
     else finalIdProofUrl = undefined;
   }
 
   const { photo, idProof, ...restUpdates } = updates;
   
+  // Ensure new fields are part of the update, handling undefined or empty strings from form
   const updatedStudentData = { 
     ...originalStudentData, 
     ...restUpdates,
     photoUrl: finalPhotoUrl,
     idProofUrl: finalIdProofUrl,
+    mobileNumber: updates.mobileNumber === "" ? undefined : (updates.mobileNumber ?? originalStudentData.mobileNumber),
+    fatherName: updates.fatherName === "" ? undefined : (updates.fatherName ?? originalStudentData.fatherName),
+    address: updates.address === "" ? undefined : (updates.address ?? originalStudentData.address),
   };
 
   const dbUpdates: Record<string, any> = {};
@@ -149,13 +165,12 @@ export const updateStudent = async (id: string, updates: Partial<StudentDataInpu
         dbUpdates[`/seats/${newSeatId}/studentName`] = updatedStudentData.fullName;
         dbUpdates[`/students/${id}/seatId`] = newSeatId;
       } else {
-         dbUpdates[`/students/${id}/seatId`] = null; // New seat not found
+         dbUpdates[`/students/${id}/seatId`] = null; 
       }
     } else {
-        dbUpdates[`/students/${id}/seatId`] = null; // Unassigning seat
+        dbUpdates[`/students/${id}/seatId`] = null; 
     }
   } else if (updates.fullName && originalStudentData.seatId) {
-    // If only name changed and student has a seat, update studentName on seat
     dbUpdates[`/seats/${originalStudentData.seatId}/studentName`] = updatedStudentData.fullName;
   }
   
@@ -263,10 +278,10 @@ export const deleteSeat = async (id: string): Promise<boolean> => {
   
   const seatToDelete = seatSnapshot.val() as Seat;
   const updates: Record<string, any> = {};
-  updates[`/seats/${id}`] = null; // Delete seat
+  updates[`/seats/${id}`] = null; 
 
   if (seatToDelete.isOccupied && seatToDelete.studentId) {
-    updates[`/students/${seatToDelete.studentId}/seatId`] = null; // Unassign student
+    updates[`/students/${seatToDelete.studentId}/seatId`] = null; 
   }
   await update(ref(db), updates);
   return true;
@@ -289,7 +304,7 @@ export const assignSeat = async (studentId: string, newSeatId: string): Promise<
   }
 
   const updates: Record<string, any> = {};
-  if (student.seatId && student.seatId !== newSeatId) { // Student had an old seat
+  if (student.seatId && student.seatId !== newSeatId) { 
     updates[`/seats/${student.seatId}/isOccupied`] = false;
     updates[`/seats/${student.seatId}/studentId`] = null;
     updates[`/seats/${student.seatId}/studentName`] = null;
@@ -310,7 +325,7 @@ export const unassignSeat = async (seatId: string): Promise<boolean> => {
   if (!seatSnapshot.exists()) return false;
 
   const seat = {id: seatSnapshot.key, ...seatSnapshot.val()} as Seat;
-  if (!seat.isOccupied || !seat.studentId) return false; // Already vacant or no student assigned
+  if (!seat.isOccupied || !seat.studentId) return false; 
 
   const updates: Record<string, any> = {};
   updates[`/seats/${seatId}/isOccupied`] = false;

@@ -3,24 +3,27 @@ export interface Student {
   id: string;
   fullName: string;
   photoUrl?: string;
-  contactDetails: string;
+  contactDetails: string; // Email
+  mobileNumber?: string;
+  address?: string;
+  fatherName?: string;
   idProofUrl?: string;
   notes?: string;
-  seatId?: string; 
+  seatId?: string;
   status: 'enrolled' | 'owing' | 'inactive'; // 'enrolled' can mean 'active'
   feesDue: number; // Amount to pay
   lastPaymentDate?: string;
   enrollmentDate: string; // Joined On
-  paymentTypeId?: string; // Renamed from feePlanId
+  paymentTypeId?: string;
 }
 
 export interface Seat {
   id: string;
   seatNumber: string;
-  floor: string; 
+  floor: string;
   isOccupied: boolean;
   studentId?: string;
-  studentName?: string; 
+  studentName?: string;
 }
 
 export interface FeePayment {

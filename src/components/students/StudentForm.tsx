@@ -21,7 +21,7 @@ import type { Student, Seat, PaymentType } from "@/types";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Loader2, Eye, UploadCloud } from "lucide-react";
+import { Loader2, Eye } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getSeats, getPaymentTypes } from "@/lib/data";
 import Image from "next/image";
@@ -33,16 +33,19 @@ const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/web
 const studentFormSchema = z.object({
   fullName: z.string().min(2, { message: "Full name must be at least 2 characters." }).max(100),
   contactDetails: z.string().email({ message: "Invalid email address." }),
-  notes: z.string().max(500).optional(),
+  mobileNumber: z.string().optional().or(z.literal('')).refine(val => val === '' || val === undefined || /^\d{10}$/.test(val), {
+    message: "Mobile number must be 10 digits if provided.",
+  }),
+  fatherName: z.string().max(100).optional().or(z.literal('')),
+  address: z.string().max(500).optional().or(z.literal('')),
+  notes: z.string().max(500).optional().or(z.literal('')),
   seatId: z.string(),
   status: z.enum(["enrolled", "owing", "inactive"]),
   feesDue: z.coerce.number().min(0, { message: "Amount to Pay cannot be negative." }),
   enrollmentDate: z.string().refine((date) => !isNaN(Date.parse(date)), { message: "Invalid date format." }),
   paymentTypeId: z.string(),
-  // For existing string URLs
   photoUrl: z.string().url({ message: "Invalid URL for photo." }).optional().or(z.literal('')),
   idProofUrl: z.string().url({ message: "Invalid URL for ID proof." }).optional().or(z.literal('')),
-  // For new file uploads
   photoUpload: z.instanceof(FileList).optional()
     .refine(files => !files || files.length === 0 || files[0].size <= MAX_FILE_SIZE, `Max photo size is 5MB.`)
     .refine(files => !files || files.length === 0 || ACCEPTED_IMAGE_TYPES.includes(files[0].type), "Only .jpg, .jpeg, .png and .webp formats are supported."),
@@ -54,7 +57,10 @@ export type StudentFormValues = z.infer<typeof studentFormSchema>;
 
 export interface StudentSubmitValues {
   fullName: string;
-  contactDetails: string;
+  contactDetails: string; // Email
+  mobileNumber?: string;
+  fatherName?: string;
+  address?: string;
   notes?: string;
   seatId?: string;
   status: 'enrolled' | 'owing' | 'inactive';
@@ -97,18 +103,24 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
     resolver: zodResolver(studentFormSchema),
     defaultValues: initialData ? {
       ...initialData,
+      mobileNumber: initialData.mobileNumber || "",
+      fatherName: initialData.fatherName || "",
+      address: initialData.address || "",
       feesDue: initialData.feesDue || 0,
       enrollmentDate: initialData.enrollmentDate || new Date().toISOString().split('T')[0],
       seatId: initialData.seatId || NONE_SELECT_VALUE,
       paymentTypeId: initialData.paymentTypeId || NONE_SELECT_VALUE,
-      photoUrl: initialData.photoUrl || "", // Keep existing URL for reference
-      idProofUrl: initialData.idProofUrl || "", // Keep existing URL for reference
+      photoUrl: initialData.photoUrl || "",
+      idProofUrl: initialData.idProofUrl || "",
       notes: initialData.notes || "",
       photoUpload: undefined,
       idProofUpload: undefined,
     } : {
       fullName: "",
       contactDetails: "",
+      mobileNumber: "",
+      fatherName: "",
+      address: "",
       photoUrl: "",
       idProofUrl: "",
       notes: "",
@@ -132,7 +144,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
       setPhotoPreview(objectUrl);
       return () => URL.revokeObjectURL(objectUrl);
     } else if (initialData?.photoUrl) {
-       setPhotoPreview(initialData.photoUrl); // Revert to initial if selection is cleared
+       setPhotoPreview(initialData.photoUrl);
     } else {
         setPhotoPreview(null);
     }
@@ -142,7 +154,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
     if (watchedIdProofUpload && watchedIdProofUpload.length > 0) {
       setIdProofFileName(watchedIdProofUpload[0].name);
     } else if (initialData?.idProofUrl) {
-      setIdProofFileName("Existing ID Proof"); // Revert to initial if selection is cleared
+      setIdProofFileName("Existing ID Proof");
     } else {
       setIdProofFileName(null);
     }
@@ -154,9 +166,12 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
       const { photoUpload, idProofUpload, photoUrl: initialPhotoUrl, idProofUrl: initialIdProofUrl, ...restOfFormValues } = values;
       
       const submissionData: StudentSubmitValues = {
-        ...restOfFormValues, // this includes fullName, contactDetails, notes, status, feesDue, enrollmentDate
+        ...restOfFormValues,
         seatId: values.seatId === NONE_SELECT_VALUE ? undefined : values.seatId,
         paymentTypeId: values.paymentTypeId === NONE_SELECT_VALUE ? undefined : values.paymentTypeId,
+        mobileNumber: values.mobileNumber || undefined,
+        fatherName: values.fatherName || undefined,
+        address: values.address || undefined,
       };
 
       if (photoUpload && photoUpload.length > 0) {
@@ -204,14 +219,57 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
                 </FormItem>
               )}
             />
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+                control={form.control}
+                name="contactDetails"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contact Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="student@example.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="mobileNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Mobile Number (Optional)</FormLabel>
+                    <FormControl>
+                      <Input type="tel" placeholder="Enter 10-digit mobile number" {...field} value={field.value ?? ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             <FormField
               control={form.control}
-              name="contactDetails"
+              name="fatherName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Contact Email</FormLabel>
+                  <FormLabel>Father's Name (Optional)</FormLabel>
                   <FormControl>
-                    <Input type="email" placeholder="student@example.com" {...field} />
+                    <Input placeholder="Enter father's name" {...field} value={field.value ?? ""} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="address"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Address (Optional)</FormLabel>
+                  <FormControl>
+                    <Textarea placeholder="Enter student's address" {...field} value={field.value ?? ""} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -383,5 +441,3 @@ export function StudentForm({ initialData, onSubmit, isSubmitting }: StudentForm
     </Card>
   );
 }
-
-    
