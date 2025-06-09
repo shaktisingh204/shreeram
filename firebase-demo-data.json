@@ -3,8 +3,8 @@
   "users_metadata": {
     "YOUR_ADMIN_FIREBASE_UID_HERE": {
       "id": "YOUR_ADMIN_FIREBASE_UID_HERE",
-      "email": "admin@shreeram.com",
-      "displayName": "Super Admin",
+      "email": "shakti@gmail.com",
+      "displayName": "Shakti (Super Admin)",
       "role": "superadmin",
       "assignedLibraryId": "library_main",
       "assignedLibraryName": "Main Library (Default)"
@@ -20,6 +20,16 @@
       "id": "library_branch_a",
       "name": "Branch A - North Campus",
       "createdAt": "2024-02-15T00:00:00.000Z"
+    },
+    "library_branch_b": {
+      "id": "library_branch_b",
+      "name": "Branch B - South City",
+      "createdAt": "2024-03-20T00:00:00.000Z"
+    },
+    "library_branch_c": {
+      "id": "library_branch_c",
+      "name": "Branch C - West End",
+      "createdAt": "2024-04-10T00:00:00.000Z"
     }
   },
   "libraries": {
@@ -167,6 +177,18 @@
           "notes": "July fee (Branch A)"
         }
       }
+    },
+    "library_branch_b": {
+      "students": {},
+      "seats": {},
+      "paymentTypes": {},
+      "payments": {}
+    },
+    "library_branch_c": {
+      "students": {},
+      "seats": {},
+      "paymentTypes": {},
+      "payments": {}
     }
   },
   "config": {
