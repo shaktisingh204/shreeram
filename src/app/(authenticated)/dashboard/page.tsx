@@ -9,6 +9,8 @@ import { Users, Armchair, TrendingUp, AlertTriangle, DollarSign, Loader2 } from 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAuth } from '@/context/AuthContext';
+import { Button } from '@/components/ui/button';
+import { useRouter } from 'next/navigation';
 
 const sampleMonthlyData = [
   { name: 'Jan', income: 40000, expenses: 24000 },
@@ -22,20 +24,30 @@ const sampleMonthlyData = [
 
 
 export default function DashboardPage() {
-  const { currentLibraryId, currentLibraryName, loading: authLoading } = useAuth();
+  const { user, userMetadata, currentLibraryId, currentLibraryName, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!currentLibraryId || authLoading) return;
-      setLoadingData(true);
+      if (authLoading) { // Still waiting for auth context to resolve
+        setLoadingData(true); // Keep local loading true
+        return;
+      }
+
+      if (!currentLibraryId) { // Auth resolved, but no library context
+        setLoadingData(false); // Stop local loading, context issue will be handled
+        return;
+      }
+      
+      setLoadingData(true); // Auth resolved, library context exists, start fetching dashboard data
       try {
         const data = await getDashboardSummary(currentLibraryId);
         setSummary(data);
       } catch (error) {
         console.error("Failed to fetch dashboard summary:", error);
-        setSummary(null); // Or set some error state
+        setSummary(null); 
       } finally {
         setLoadingData(false);
       }
@@ -43,7 +55,7 @@ export default function DashboardPage() {
     fetchData();
   }, [currentLibraryId, authLoading]);
 
-  if (authLoading || loadingData || !currentLibraryId) {
+  if (authLoading || loadingData) {
     return (
       <div className="flex justify-center items-center h-full">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -51,14 +63,49 @@ export default function DashboardPage() {
     );
   }
   
-  if (!summary) {
+  if (!currentLibraryId && user) { // User is authenticated, but no library context
+     return (
+      <div className="flex flex-col justify-center items-center h-full text-center p-4">
+        <AlertTriangle className="h-16 w-16 text-destructive mb-4" />
+        <p className="text-2xl font-semibold text-destructive">Configuration Incomplete</p>
+        <p className="text-muted-foreground mt-2">
+          Your user account is authenticated, but essential configuration (like role or library assignment) is missing or couldn't be loaded.
+        </p>
+        {!userMetadata && (
+          <p className="text-sm text-muted-foreground mt-3">
+            This usually means your user metadata is not set up correctly in the database.
+          </p>
+        )}
+        <p className="text-sm text-muted-foreground mt-3">
+          If you are the <strong>Super Admin</strong>, please ensure:
+        </p>
+        <ul className="text-sm text-muted-foreground list-disc list-inside mt-1">
+          <li>Your UID in <code>firebase-demo-data.json</code> (under <code>users_metadata</code>) is correct for user <code>{user.email}</code>.</li>
+          <li>The <code>firebase-demo-data.json</code> file has been correctly imported into Firebase Realtime Database.</li>
+        </ul>
+         <p className="text-sm text-muted-foreground mt-3">
+          If you are a <strong>Manager</strong>, please contact your superadmin for assistance.
+        </p>
+      </div>
+    );
+  }
+  
+  if (!summary && currentLibraryId) { // Library context exists, but failed to fetch summary
      return (
       <div className="flex flex-col justify-center items-center h-full text-center">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
-        <p className="text-xl font-semibold">Could not load dashboard data.</p>
-        <p className="text-muted-foreground">Please ensure a library context is set or try again later.</p>
+        <p className="text-xl font-semibold">Could not load dashboard data for {currentLibraryName}.</p>
+        <p className="text-muted-foreground">Please try refreshing, or check if the library has data.</p>
       </div>
     );
+  }
+  
+  if (!summary) { // Catch-all if summary is null for any other reason after loading
+      return (
+        <div className="flex justify-center items-center h-full">
+           <p className="text-muted-foreground">No dashboard data to display.</p>
+        </div>
+      )
   }
 
 

@@ -65,7 +65,16 @@ export default function SeatsPage() {
   const { toast } = useToast();
 
   const fetchAllData = async () => {
-    if (!currentLibraryId) return;
+    if (authLoading) {
+      setLoadingData(true);
+      return;
+    }
+    if (!currentLibraryId) {
+      setLoadingData(false);
+      setAllSeats([]);
+      setStudents([]);
+      return;
+    }
     setLoadingData(true);
     try {
       const seatData = await getSeats(currentLibraryId);
@@ -73,18 +82,16 @@ export default function SeatsPage() {
       setAllSeats(seatData);
       setStudents(studentData.filter(s => s.status !== 'inactive'));
     } catch (error) {
-        toast({ title: "Error", description: "Failed to fetch data.", variant: "destructive" });
+        toast({ title: "Error", description: "Failed to fetch seat or student data.", variant: "destructive" });
+        setAllSeats([]);
+        setStudents([]);
     } finally {
         setLoadingData(false);
     }
   };
 
   useEffect(() => {
-    if (!authLoading && currentLibraryId) {
-        fetchAllData();
-    } else if (!authLoading && !currentLibraryId) {
-        setLoadingData(false); // No library selected, stop loading
-    }
+    fetchAllData();
   }, [currentLibraryId, authLoading]);
 
   const seatsByFloor = useMemo(() => {
@@ -117,8 +124,9 @@ export default function SeatsPage() {
       setIsAssignDialogOpen(false);
     } catch (error) {
       toast({ title: "Error", description: (error as Error).message || "Failed to assign seat.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
   
   const handleUnassignSeat = async () => {
@@ -134,8 +142,9 @@ export default function SeatsPage() {
       setIsAssignDialogOpen(false);
     } catch (error) {
         toast({ title: "Error", description: (error as Error).message || "Failed to make seat empty.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   const openAddSeatDialog = () => {
@@ -201,10 +210,10 @@ export default function SeatsPage() {
 
   if (!currentLibraryId) {
     return (
-      <div className="flex flex-col justify-center items-center h-full text-center">
+      <div className="flex flex-col justify-center items-center h-full text-center p-4">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
-        <p className="text-xl font-semibold">No Library Selected</p>
-        <p className="text-muted-foreground">Please select a library context to manage seats.</p>
+        <p className="text-xl font-semibold">No Library Selected / User Misconfiguration</p>
+        <p className="text-muted-foreground">Please ensure your user account is correctly set up with a library or select a library if you are a superadmin.</p>
         <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
       </div>
     );

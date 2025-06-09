@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from '@/hooks/use-toast';
-import { DollarSign, PlusCircle, CheckCircle, Loader2, History, Search, MoreHorizontal, AlertTriangle } from 'lucide-react';
+import { DollarSign, PlusCircle, CheckCircle, Loader2, History, Search, MoreHorizontal, AlertTriangle, FileText } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,7 +69,17 @@ export default function FeeCollectionPage() {
 
 
   const fetchData = async () => {
-    if(!currentLibraryId) return;
+    if(authLoading) {
+      setLoadingData(true);
+      return;
+    }
+    if(!currentLibraryId) {
+      setLoadingData(false);
+      setStudents([]);
+      setPayments([]);
+      setPaymentTypes([]);
+      return;
+    }
     setLoadingData(true);
     try {
       const studentData = await getStudents(currentLibraryId);
@@ -79,18 +89,17 @@ export default function FeeCollectionPage() {
       setPayments(paymentData);
       setPaymentTypes(paymentTypeData);
     } catch (error) {
-      toast({ title: "Error", description: "Failed to fetch data.", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to fetch fee data.", variant: "destructive" });
+      setStudents([]);
+      setPayments([]);
+      setPaymentTypes([]);
     } finally {
       setLoadingData(false);
     }
   };
 
   useEffect(() => {
-    if (!authLoading && currentLibraryId) {
-        fetchData();
-    } else if (!authLoading && !currentLibraryId) {
-        setLoadingData(false);
-    }
+    fetchData();
   }, [currentLibraryId, authLoading]);
 
   const filteredStudents = useMemo(() => {
@@ -178,10 +187,10 @@ export default function FeeCollectionPage() {
 
   if (!currentLibraryId) {
     return (
-      <div className="flex flex-col justify-center items-center h-full text-center">
+      <div className="flex flex-col justify-center items-center h-full text-center p-4">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
-        <p className="text-xl font-semibold">No Library Selected</p>
-        <p className="text-muted-foreground">Please select a library context to manage fees.</p>
+        <p className="text-xl font-semibold">No Library Selected / User Misconfiguration</p>
+        <p className="text-muted-foreground">Please ensure your user account is correctly set up with a library or select a library if you are a superadmin.</p>
         <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
       </div>
     );
@@ -282,10 +291,18 @@ export default function FeeCollectionPage() {
           </div>
            ) : (
              <div className="text-center py-12">
-                <Search className="mx-auto h-12 w-12 text-muted-foreground" />
-                <h3 className="mt-2 text-xl font-semibold">No Students Match Filter</h3>
+                {searchTerm || statusFilter !== 'all' ?
+                    <Search className="mx-auto h-12 w-12 text-muted-foreground" /> :
+                    <FileText className="mx-auto h-12 w-12 text-muted-foreground" /> 
+                }
+                <h3 className="mt-2 text-xl font-semibold">
+                    {searchTerm || statusFilter !== 'all' ? 'No Students Match Filter' : 'No Student Fee Data'}
+                </h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                    Try adjusting your search or filter criteria.
+                    {searchTerm || statusFilter !== 'all' ? 
+                        "Try adjusting your search or filter criteria." :
+                        "No student fee information to display for this library."
+                    }
                 </p>
             </div>
            )}

@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { getStudents, getSeats } from '@/lib/data'; 
 import type { Student, Seat } from '@/types'; 
-import { PlusCircle, Search, Edit, Eye, Trash2, Loader2, MoreHorizontal, AlertTriangle } from 'lucide-react';
+import { PlusCircle, Search, Edit, Eye, Trash2, Loader2, MoreHorizontal, AlertTriangle, Users } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,9 +25,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from '@/context/AuthContext';
+import { useRouter } from 'next/navigation';
+
 
 export default function StudentsPage() {
   const { currentLibraryId, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [students, setStudents] = useState<Student[]>([]);
   const [seats, setSeats] = useState<Seat[]>([]); 
   const [searchTerm, setSearchTerm] = useState('');
@@ -36,7 +39,16 @@ export default function StudentsPage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!currentLibraryId || authLoading) return;
+      if (authLoading) {
+        setLoadingData(true);
+        return;
+      }
+      if (!currentLibraryId) {
+        setLoadingData(false);
+        setStudents([]);
+        setSeats([]);
+        return;
+      }
       setLoadingData(true);
       try {
         const studentData = await getStudents(currentLibraryId);
@@ -95,7 +107,7 @@ export default function StudentsPage() {
     return seat ? `${seat.seatNumber} (${seat.floor})` : 'N/A';
   };
 
-  if (authLoading || loadingData || !currentLibraryId) {
+  if (authLoading || loadingData) {
     return (
       <div className="flex justify-center items-center h-full">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -105,10 +117,11 @@ export default function StudentsPage() {
   
   if (!currentLibraryId) {
      return (
-      <div className="flex flex-col justify-center items-center h-full text-center">
+      <div className="flex flex-col justify-center items-center h-full text-center p-4">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
-        <p className="text-xl font-semibold">No Library Selected</p>
-        <p className="text-muted-foreground">Please select a library context to view students.</p>
+        <p className="text-xl font-semibold">No Library Selected / User Misconfiguration</p>
+        <p className="text-muted-foreground">Please ensure your user account is correctly set up with a library or select a library if you are a superadmin.</p>
+        <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
       </div>
     );
   }
@@ -211,10 +224,13 @@ export default function StudentsPage() {
         </div>
       ) : (
         <div className="text-center py-12">
-          <Search className="mx-auto h-12 w-12 text-muted-foreground" />
+          {searchTerm || statusFilter !== 'all' ? 
+             <Search className="mx-auto h-12 w-12 text-muted-foreground" /> : 
+             <Users className="mx-auto h-12 w-12 text-muted-foreground" />
+          }
           <h3 className="mt-2 text-xl font-semibold">No Students Found</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            {searchTerm || statusFilter !== 'all' ? "Try adjusting your search or filter criteria." : "Get started by adding a new student."}
+            {searchTerm || statusFilter !== 'all' ? "Try adjusting your search or filter criteria." : "Get started by adding a new student to this library."}
           </p>
           {!(searchTerm || statusFilter !== 'all') && (
              <Link href="/students/add">

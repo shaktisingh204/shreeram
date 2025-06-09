@@ -32,24 +32,29 @@ export default function PaymentTypesPage() {
   const { toast } = useToast();
 
   const fetchData = async () => {
-    if (!currentLibraryId) return;
+    if (authLoading) {
+      setLoadingData(true);
+      return;
+    }
+    if (!currentLibraryId) {
+      setLoadingData(false);
+      setPaymentTypes([]);
+      return;
+    }
     setLoadingData(true);
     try {
         const data = await getPaymentTypes(currentLibraryId);
         setPaymentTypes(data);
     } catch (error) {
         toast({ title: "Error", description: "Failed to fetch payment types.", variant: "destructive" });
+        setPaymentTypes([]);
     } finally {
         setLoadingData(false);
     }
   };
 
   useEffect(() => {
-     if (!authLoading && currentLibraryId) {
-        fetchData();
-    } else if (!authLoading && !currentLibraryId) {
-        setLoadingData(false);
-    }
+    fetchData();
   }, [currentLibraryId, authLoading]);
 
   const handleAddClick = () => {
@@ -63,12 +68,14 @@ export default function PaymentTypesPage() {
   };
 
   const handleDeleteClick = async (planId: string) => {
-    // Add currentLibraryId check if deletePaymentType is library specific
+    if (!currentLibraryId) return;
     if (confirm("Are you sure you want to delete this payment type? This action cannot be undone.")) {
         // In a real app, call deletePaymentType(currentLibraryId, planId)
+        // For now, this is a mock delete.
+        // await deletePaymentType(currentLibraryId, planId); // Uncomment when implemented
         setPaymentTypes(prevPlans => prevPlans.filter(p => p.id !== planId));
         toast({ title: "Success", description: "Payment type deleted (mock)." });
-        // await fetchData(); // if delete is implemented
+        // await fetchData(); // if delete is implemented in lib/data.ts
     }
   };
 
@@ -103,10 +110,10 @@ export default function PaymentTypesPage() {
 
   if (!currentLibraryId) {
      return (
-      <div className="flex flex-col justify-center items-center h-full text-center">
+      <div className="flex flex-col justify-center items-center h-full text-center p-4">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
-        <p className="text-xl font-semibold">No Library Selected</p>
-        <p className="text-muted-foreground">Please select a library context to manage payment types.</p>
+        <p className="text-xl font-semibold">No Library Selected / User Misconfiguration</p>
+        <p className="text-muted-foreground">Please ensure your user account is correctly set up with a library or select a library if you are a superadmin.</p>
         <Button onClick={() => router.push('/dashboard')} className="mt-4">Go to Dashboard</Button>
       </div>
     );
