@@ -116,6 +116,7 @@ export default function StudentDetailPage() {
             <h3 className="text-lg font-semibold text-foreground border-b pb-2 mb-3">Contact & Personal Info</h3>
             <InfoItem icon={Mail} label="Contact Email" value={student.contactDetails} />
             {student.mobileNumber && <InfoItem icon={Phone} label="Mobile Number" value={student.mobileNumber} />}
+            {student.fatherName && <InfoItem icon={UserCircle2} label="Father's Name" value={student.fatherName} />}
             {student.address && <InfoItem icon={Home} label="Address" value={student.address} />}
             <InfoItem icon={CalendarDays} label="Joined On" value={new Date(student.enrollmentDate).toLocaleDateString()} />
             {assignedSeat && <InfoItem icon={Armchair} label="Assigned Seat" value={`${assignedSeat.seatNumber} (Floor: ${assignedSeat.floor})`} />}
@@ -190,3 +191,4 @@ function InfoItem({ icon: Icon, label, value, className }: InfoItemProps) {
     </div>
   );
 }
+
