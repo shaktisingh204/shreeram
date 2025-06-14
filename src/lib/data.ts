@@ -80,6 +80,29 @@ export const addLibraryMetadata = async (name: string): Promise<LibraryMetadata>
   return newLibrary;
 };
 
+export const deleteLibrary = async (libraryIdToDelete: string): Promise<void> => {
+  const updates: Record<string, any> = {};
+
+  // 1. Mark library metadata for deletion
+  updates[`libraries_metadata/${libraryIdToDelete}`] = null;
+
+  // 2. Mark library data (students, seats, etc.) for deletion
+  updates[`libraries/${libraryIdToDelete}`] = null;
+
+  // 3. Find and unassign any managers assigned to this library
+  const allUsers = await getUsersMetadata();
+  allUsers.forEach(user => {
+    if (user.role === 'manager' && user.assignedLibraryId === libraryIdToDelete) {
+      updates[`users_metadata/${user.id}/assignedLibraryId`] = null;
+      updates[`users_metadata/${user.id}/assignedLibraryName`] = null;
+    }
+  });
+
+  // 4. Perform all updates/deletions
+  await update(ref(db), updates);
+};
+
+
 // --- Library-Specific Data Operations ---
 const ensureSingleLibraryId = (libraryId: string | null): string => {
   if (!libraryId) {
@@ -135,7 +158,7 @@ interface StudentDataInput {
   seatId?: string;
   status: 'enrolled' | 'owing' | 'inactive';
   amountPaidNow: number; 
-  feesDue?: number; // Student's current balance before this transaction (for edit)
+  feesDue?: number; 
   enrollmentDate: string;
   paymentTypeId?: string;
   photo?: File | string;
@@ -158,7 +181,7 @@ export const addStudent = async (libraryId: string, studentData: StudentDataInpu
     finalIdProofUrl = `https://placehold.co/200x150.png?text=${encodeURIComponent(studentData.idProof.name.substring(0,10) || 'ID')}_ID`;
   }
   
-  const { photo, idProof, amountPaidNow, feesDue: currentFeesDueIgnoredForAdd, ...restStudentData } = studentData;
+  const { photo, idProof, amountPaidNow, feesDue: currentFeesDueFromForm } = studentData;
   
   const newStudentRef = push(ref(db, `libraries/${currentLibraryId}/students`));
   const newStudentId = newStudentRef.key;
@@ -176,14 +199,18 @@ export const addStudent = async (libraryId: string, studentData: StudentDataInpu
     finalStatus = netBalance > 0 ? 'owing' : 'enrolled';
   }
 
-
   const newStudentData: Omit<Student, 'id' | 'feesDue' | 'status'> & { id?: string; feesDue: number; status: Student['status'] } = {
-    ...restStudentData,
-    photoUrl: finalPhotoUrl,
-    idProofUrl: finalIdProofUrl,
+    fullName: studentData.fullName,
+    contactDetails: studentData.contactDetails,
     mobileNumber: studentData.mobileNumber || undefined,
     fatherName: studentData.fatherName || undefined,
     address: studentData.address || undefined,
+    notes: studentData.notes || undefined,
+    seatId: studentData.seatId === '__NONE__' ? undefined : studentData.seatId,
+    enrollmentDate: studentData.enrollmentDate,
+    paymentTypeId: studentData.paymentTypeId === '__NONE__' ? undefined : studentData.paymentTypeId,
+    photoUrl: finalPhotoUrl,
+    idProofUrl: finalIdProofUrl,
     feesDue: netBalance,
     status: finalStatus,
     lastPaymentDate: amountPaidNow > 0 ? new Date().toISOString().split('T')[0] : undefined,
@@ -221,12 +248,12 @@ export const addStudent = async (libraryId: string, studentData: StudentDataInpu
       studentId: newStudentId,
       amount: amountPaidNow,
       paymentDate: new Date().toISOString().split('T')[0],
-      notes: `Initial payment on enrollment/update. Plan charge: ${paymentTypeCharge}. Paid: ${amountPaidNow}.`,
+      notes: `Initial payment on enrollment. Plan charge: ${paymentTypeCharge}. Paid: ${amountPaidNow}.`,
     };
-    await addPayment(currentLibraryId, paymentRecord, studentToSave.fullName, false); // false to skip student balance update as we do it here
+    await addPayment(currentLibraryId, paymentRecord, studentToSave.fullName, false);
   }
   
-  await update(ref(db), updates); // This applies student data and seat updates
+  await update(ref(db), updates); 
   return studentToSave;
 };
 
@@ -252,67 +279,67 @@ export const updateStudent = async (libraryId: string, studentId: string, update
     else finalIdProofUrl = undefined;
   }
 
-  const { photo, idProof, amountPaidNow, feesDue: currentFeesDueFromForm, ...restUpdates } = updatesIn;
+  const { photo, idProof, amountPaidNow, feesDue: currentFeesDueFromForm } = updatesIn;
   
   let paymentTypeChargeDelta = 0;
-  // If payment type changed, calculate the new charge.
-  // This logic assumes if a payment type is selected, its full amount is charged for the "current period" of this update.
-  // If paymentTypeId is same as original, no new charge from plan. If it changed to NONE, also no new charge.
-  if (updatesIn.paymentTypeId && updatesIn.paymentTypeId !== '__NONE__' && updatesIn.paymentTypeId !== originalStudentData.paymentTypeId) {
-    const pt = await getPaymentTypeById(currentLibraryId, updatesIn.paymentTypeId);
+  const newPaymentTypeId = updatesIn.paymentTypeId === '__NONE__' ? undefined : updatesIn.paymentTypeId;
+
+  if (newPaymentTypeId && newPaymentTypeId !== originalStudentData.paymentTypeId) {
+    const pt = await getPaymentTypeById(currentLibraryId, newPaymentTypeId);
     if (pt) paymentTypeChargeDelta = pt.amount;
-  } else if (!updatesIn.paymentTypeId || updatesIn.paymentTypeId === '__NONE__') {
-     // If plan removed, no delta charge.
   }
 
 
-  const currentBalance = originalStudentData.feesDue; // This is the student's actual balance before this transaction
+  const currentBalance = currentFeesDueFromForm ?? originalStudentData.feesDue; 
   const netBalance = currentBalance + paymentTypeChargeDelta - amountPaidNow;
   
-  let finalStatus = restUpdates.status;
-  if (restUpdates.status !== 'inactive') {
+  let finalStatus = updatesIn.status;
+  if (updatesIn.status !== 'inactive') {
     finalStatus = netBalance > 0 ? 'owing' : 'enrolled';
   }
 
   const updatedStudentData: Student = { 
     ...originalStudentData, 
-    ...restUpdates,
-    photoUrl: finalPhotoUrl,
-    idProofUrl: finalIdProofUrl,
+    fullName: updatesIn.fullName,
+    contactDetails: updatesIn.contactDetails,
     mobileNumber: updatesIn.mobileNumber === "" ? undefined : (updatesIn.mobileNumber ?? originalStudentData.mobileNumber),
     fatherName: updatesIn.fatherName === "" ? undefined : (updatesIn.fatherName ?? originalStudentData.fatherName),
     address: updatesIn.address === "" ? undefined : (updatesIn.address ?? originalStudentData.address),
-    feesDue: netBalance,
+    notes: updatesIn.notes === "" ? undefined : (updatesIn.notes ?? originalStudentData.notes),
+    enrollmentDate: updatesIn.enrollmentDate,
     status: finalStatus,
+    photoUrl: finalPhotoUrl,
+    idProofUrl: finalIdProofUrl,
+    feesDue: netBalance,
     lastPaymentDate: amountPaidNow > 0 ? new Date().toISOString().split('T')[0] : originalStudentData.lastPaymentDate,
-    paymentTypeId: updatesIn.paymentTypeId === '__NONE__' ? undefined : (updatesIn.paymentTypeId || originalStudentData.paymentTypeId),
+    paymentTypeId: newPaymentTypeId || originalStudentData.paymentTypeId,
+    seatId: updatesIn.seatId === '__NONE__' ? undefined : (updatesIn.seatId || originalStudentData.seatId),
   };
 
   const dbUpdates: Record<string, any> = {};
   dbUpdates[`libraries/${currentLibraryId}/students/${studentId}`] = updatedStudentData;
 
-  const newSeatId = updatedStudentData.seatId === '__NONE__' ? undefined : updatedStudentData.seatId;
+  const newSeatIdForUpdate = updatedStudentData.seatId;
   const oldSeatId = originalStudentData.seatId;
 
-  if (newSeatId !== oldSeatId) {
+  if (newSeatIdForUpdate !== oldSeatId) {
     if (oldSeatId) {
       dbUpdates[`libraries/${currentLibraryId}/seats/${oldSeatId}/isOccupied`] = false;
       dbUpdates[`libraries/${currentLibraryId}/seats/${oldSeatId}/studentId`] = null;
       dbUpdates[`libraries/${currentLibraryId}/seats/${oldSeatId}/studentName`] = null;
     }
-    if (newSeatId) {
-      const newSeatSnapshot = await get(ref(db, `libraries/${currentLibraryId}/seats/${newSeatId}`));
+    if (newSeatIdForUpdate) {
+      const newSeatSnapshot = await get(ref(db, `libraries/${currentLibraryId}/seats/${newSeatIdForUpdate}`));
       if (newSeatSnapshot.exists()) {
         const newSeatVal = newSeatSnapshot.val();
         if (newSeatVal.isOccupied && newSeatVal.studentId !== studentId) {
           throw new Error(`Seat ${newSeatVal.seatNumber} (${newSeatVal.floor}) is already taken by ${newSeatVal.studentName}.`);
         }
-        dbUpdates[`libraries/${currentLibraryId}/seats/${newSeatId}/isOccupied`] = true;
-        dbUpdates[`libraries/${currentLibraryId}/seats/${newSeatId}/studentId`] = studentId;
-        dbUpdates[`libraries/${currentLibraryId}/seats/${newSeatId}/studentName`] = updatedStudentData.fullName;
-        // Ensure student record is also updated if seat was changed successfully
-        updatedStudentData.seatId = newSeatId; 
-        dbUpdates[`libraries/${currentLibraryId}/students/${studentId}/seatId`] = newSeatId;
+        dbUpdates[`libraries/${currentLibraryId}/seats/${newSeatIdForUpdate}/isOccupied`] = true;
+        dbUpdates[`libraries/${currentLibraryId}/seats/${newSeatIdForUpdate}/studentId`] = studentId;
+        dbUpdates[`libraries/${currentLibraryId}/seats/${newSeatIdForUpdate}/studentName`] = updatedStudentData.fullName;
+        updatedStudentData.seatId = newSeatIdForUpdate; 
+        dbUpdates[`libraries/${currentLibraryId}/students/${studentId}/seatId`] = newSeatIdForUpdate;
       } else {
          updatedStudentData.seatId = undefined;
          dbUpdates[`libraries/${currentLibraryId}/students/${studentId}/seatId`] = null; 
@@ -321,7 +348,7 @@ export const updateStudent = async (libraryId: string, studentId: string, update
         updatedStudentData.seatId = undefined;
         dbUpdates[`libraries/${currentLibraryId}/students/${studentId}/seatId`] = null; 
     }
-  } else if (restUpdates.fullName && originalStudentData.seatId) {
+  } else if (updatesIn.fullName && originalStudentData.seatId) {
     dbUpdates[`libraries/${currentLibraryId}/seats/${originalStudentData.seatId}/studentName`] = updatedStudentData.fullName;
   }
   
@@ -332,8 +359,6 @@ export const updateStudent = async (libraryId: string, studentId: string, update
       paymentDate: new Date().toISOString().split('T')[0],
       notes: `Payment during update. Plan charge delta: ${paymentTypeChargeDelta}. Paid: ${amountPaidNow}.`,
     };
-    // The addPayment function would normally update student's feesDue, but we've already calculated it.
-    // So, we pass a flag to skip that part of addPayment.
     await addPayment(currentLibraryId, paymentRecord, updatedStudentData.fullName, false);
   }
   
@@ -456,7 +481,7 @@ export const updateSeatDetails = async (libraryId: string, seatId: string, updat
     }
   }
 
-  const finalUpdates = { ...currentSeat, ...updates }; // only seatNumber and floor should be updated by this function.
+  const finalUpdates = { ...currentSeat, ...updates }; 
   const seatToSave: Seat = {
       id: currentSeat.id,
       seatNumber: finalUpdates.seatNumber,
@@ -590,7 +615,7 @@ export const updatePaymentType = async (libraryId: string, paymentTypeId: string
   const ptRef = ref(db, `libraries/${currentLibraryId}/paymentTypes/${paymentTypeId}`);
   const snapshot = await get(ptRef);
   if (!snapshot.exists()) return undefined;
-  const updatedData = { ...snapshot.val(), ...updates, id: paymentTypeId }; // Ensure ID is preserved
+  const updatedData = { ...snapshot.val(), ...updates, id: paymentTypeId }; 
   await set(ptRef, updatedData);
   return updatedData as PaymentType;
 }
@@ -621,12 +646,11 @@ export const getPayments = async (libraryId: string | null): Promise<FeePayment[
   }
 }
 
-// Modified addPayment to accept studentFullName and a flag to skip student balance update if already handled
 export const addPayment = async (
   libraryId: string, 
   paymentData: Omit<FeePayment, 'id' | 'studentName'>,
-  studentFullName?: string, // Optional: pass if known, otherwise fetch
-  updateStudentBalance: boolean = true // Flag to control student balance update
+  studentFullName?: string, 
+  updateStudentBalance: boolean = true 
 ): Promise<FeePayment> => {
   const currentLibraryId = ensureSingleLibraryId(libraryId);
   
@@ -653,7 +677,7 @@ export const addPayment = async (
     if (!studentSnapshot.exists()) throw new Error("Student not found to update balance.");
     const student = {id: studentSnapshot.key, ...studentSnapshot.val()} as Student;
     
-    const newFeesDue = student.feesDue - paymentData.amount; // Can go negative (credit)
+    const newFeesDue = student.feesDue - paymentData.amount; 
     updates[`libraries/${currentLibraryId}/students/${student.id}/feesDue`] = newFeesDue;
     updates[`libraries/${currentLibraryId}/students/${student.id}/lastPaymentDate`] = paymentData.paymentDate;
     if (student.status !== 'inactive') {
@@ -674,10 +698,8 @@ export const markFeesAsPaid = async (libraryId: string, studentId: string): Prom
   const student = {id: studentSnapshot.key, ...studentSnapshot.val()} as Student;
   const updates: Record<string, any> = {};
   updates[`libraries/${currentLibraryId}/students/${studentId}/feesDue`] = 0;
-  // Optionally, create a zero-value payment record or a special "dues cleared" record if needed for audit.
-  // For now, just updating lastPaymentDate.
   updates[`libraries/${currentLibraryId}/students/${studentId}/lastPaymentDate`] = new Date().toISOString().split('T')[0];
-  if (student.status !== 'inactive') { // Only change status if they are not inactive
+  if (student.status !== 'inactive') { 
     updates[`libraries/${currentLibraryId}/students/${studentId}/status`] = 'enrolled';
   }
   
@@ -746,3 +768,4 @@ export const getDashboardSummary = async (libraryId: string | null): Promise<Das
     };
   }
 };
+
