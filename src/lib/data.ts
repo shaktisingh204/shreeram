@@ -83,13 +83,9 @@ export const addLibraryMetadata = async (name: string): Promise<LibraryMetadata>
 export const deleteLibrary = async (libraryIdToDelete: string): Promise<void> => {
   const updates: Record<string, any> = {};
 
-  // 1. Mark library metadata for deletion
   updates[`libraries_metadata/${libraryIdToDelete}`] = null;
-
-  // 2. Mark library data (students, seats, etc.) for deletion
   updates[`libraries/${libraryIdToDelete}`] = null;
 
-  // 3. Find and unassign any managers assigned to this library
   const allUsers = await getUsersMetadata();
   allUsers.forEach(user => {
     if (user.role === 'manager' && user.assignedLibraryId === libraryIdToDelete) {
@@ -98,7 +94,6 @@ export const deleteLibrary = async (libraryIdToDelete: string): Promise<void> =>
     }
   });
 
-  // 4. Perform all updates/deletions
   await update(ref(db), updates);
 };
 
@@ -150,7 +145,7 @@ export const getStudentById = async (libraryId: string, studentId: string): Prom
 
 interface StudentDataInput {
   fullName: string;
-  contactDetails: string; 
+  aadhaarNumber?: string;
   mobileNumber?: string;
   fatherName?: string;
   address?: string;
@@ -181,7 +176,7 @@ export const addStudent = async (libraryId: string, studentData: StudentDataInpu
     finalIdProofUrl = `https://placehold.co/200x150.png?text=${encodeURIComponent(studentData.idProof.name.substring(0,10) || 'ID')}_ID`;
   }
   
-  const { photo, idProof, amountPaidNow, feesDue: currentFeesDueFromForm } = studentData;
+  const { photo, idProof, amountPaidNow } = studentData;
   
   const newStudentRef = push(ref(db, `libraries/${currentLibraryId}/students`));
   const newStudentId = newStudentRef.key;
@@ -201,7 +196,7 @@ export const addStudent = async (libraryId: string, studentData: StudentDataInpu
 
   const newStudentData: Omit<Student, 'id' | 'feesDue' | 'status'> & { id?: string; feesDue: number; status: Student['status'] } = {
     fullName: studentData.fullName,
-    contactDetails: studentData.contactDetails,
+    aadhaarNumber: studentData.aadhaarNumber || undefined,
     mobileNumber: studentData.mobileNumber || undefined,
     fatherName: studentData.fatherName || undefined,
     address: studentData.address || undefined,
@@ -286,7 +281,10 @@ export const updateStudent = async (libraryId: string, studentId: string, update
 
   if (newPaymentTypeId && newPaymentTypeId !== originalStudentData.paymentTypeId) {
     const pt = await getPaymentTypeById(currentLibraryId, newPaymentTypeId);
-    if (pt) paymentTypeChargeDelta = pt.amount;
+    if (pt) paymentTypeChargeDelta = pt.amount; 
+  } else if (!newPaymentTypeId && originalStudentData.paymentTypeId) {
+    // If payment type is removed, we might need to consider if a refund/adjustment is implied
+    // For now, this doesn't add a negative charge. It just means no *new* plan charge.
   }
 
 
@@ -301,7 +299,7 @@ export const updateStudent = async (libraryId: string, studentId: string, update
   const updatedStudentData: Student = { 
     ...originalStudentData, 
     fullName: updatesIn.fullName,
-    contactDetails: updatesIn.contactDetails,
+    aadhaarNumber: updatesIn.aadhaarNumber === "" ? undefined : (updatesIn.aadhaarNumber ?? originalStudentData.aadhaarNumber),
     mobileNumber: updatesIn.mobileNumber === "" ? undefined : (updatesIn.mobileNumber ?? originalStudentData.mobileNumber),
     fatherName: updatesIn.fatherName === "" ? undefined : (updatesIn.fatherName ?? originalStudentData.fatherName),
     address: updatesIn.address === "" ? undefined : (updatesIn.address ?? originalStudentData.address),
@@ -312,8 +310,8 @@ export const updateStudent = async (libraryId: string, studentId: string, update
     idProofUrl: finalIdProofUrl,
     feesDue: netBalance,
     lastPaymentDate: amountPaidNow > 0 ? new Date().toISOString().split('T')[0] : originalStudentData.lastPaymentDate,
-    paymentTypeId: newPaymentTypeId || originalStudentData.paymentTypeId,
-    seatId: updatesIn.seatId === '__NONE__' ? undefined : (updatesIn.seatId || originalStudentData.seatId),
+    paymentTypeId: newPaymentTypeId, // This allows clearing the paymentTypeId
+    seatId: updatesIn.seatId === '__NONE__' ? undefined : (updatesIn.seatId ?? originalStudentData.seatId),
   };
 
   const dbUpdates: Record<string, any> = {};
@@ -338,18 +336,19 @@ export const updateStudent = async (libraryId: string, studentId: string, update
         dbUpdates[`libraries/${currentLibraryId}/seats/${newSeatIdForUpdate}/isOccupied`] = true;
         dbUpdates[`libraries/${currentLibraryId}/seats/${newSeatIdForUpdate}/studentId`] = studentId;
         dbUpdates[`libraries/${currentLibraryId}/seats/${newSeatIdForUpdate}/studentName`] = updatedStudentData.fullName;
-        updatedStudentData.seatId = newSeatIdForUpdate; 
-        dbUpdates[`libraries/${currentLibraryId}/students/${studentId}/seatId`] = newSeatIdForUpdate;
+        // updatedStudentData.seatId = newSeatIdForUpdate; // No need to re-assign, already done above
+        // dbUpdates[`libraries/${currentLibraryId}/students/${studentId}/seatId`] = newSeatIdForUpdate; // Already part of updatedStudentData
       } else {
-         updatedStudentData.seatId = undefined;
+         updatedStudentData.seatId = undefined; // Ensure it's undefined if seat doesn't exist
          dbUpdates[`libraries/${currentLibraryId}/students/${studentId}/seatId`] = null; 
       }
     } else {
-        updatedStudentData.seatId = undefined;
+        updatedStudentData.seatId = undefined; // Ensure it's undefined if no seat
         dbUpdates[`libraries/${currentLibraryId}/students/${studentId}/seatId`] = null; 
     }
-  } else if (updatesIn.fullName && originalStudentData.seatId) {
-    dbUpdates[`libraries/${currentLibraryId}/seats/${originalStudentData.seatId}/studentName`] = updatedStudentData.fullName;
+  } else if (newSeatIdForUpdate && updatesIn.fullName !== originalStudentData.fullName) { 
+    // If seat is the same, but student name changed, update seat's studentName
+    dbUpdates[`libraries/${currentLibraryId}/seats/${newSeatIdForUpdate}/studentName`] = updatedStudentData.fullName;
   }
   
   if (amountPaidNow > 0) {
@@ -768,4 +767,3 @@ export const getDashboardSummary = async (libraryId: string | null): Promise<Das
     };
   }
 };
-

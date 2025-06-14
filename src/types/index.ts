@@ -3,19 +3,19 @@ export interface Student {
   id: string;
   fullName: string;
   photoUrl?: string;
-  contactDetails: string; // Email
+  aadhaarNumber?: string; // Changed from contactDetails (email)
   mobileNumber?: string;
   address?: string;
   fatherName?: string;
   idProofUrl?: string;
   notes?: string;
   seatId?: string;
-  status: 'enrolled' | 'owing' | 'inactive'; // 'enrolled' can mean 'active'
-  feesDue: number; // Amount to pay
+  status: 'enrolled' | 'owing' | 'inactive';
+  feesDue: number; 
   lastPaymentDate?: string;
-  enrollmentDate: string; // Joined On
+  enrollmentDate: string; 
   paymentTypeId?: string;
-  libraryName?: string; // Optional: for superadmin all-libraries view context
+  libraryName?: string; 
 }
 
 export interface Seat {
@@ -25,44 +25,44 @@ export interface Seat {
   isOccupied: boolean;
   studentId?: string;
   studentName?: string;
-  libraryName?: string; // Optional: for superadmin all-libraries view context
+  libraryName?: string; 
 }
 
 export interface FeePayment {
   id: string;
   studentId: string;
-  studentName?: string; // This should ideally reflect student.fullName which might have library context
+  studentName?: string; 
   amount: number;
   paymentDate: string;
   notes?: string;
-  libraryName?: string; // Optional: for superadmin all-libraries view context
+  libraryName?: string; 
 }
 
-export interface PaymentType { // Renamed from FeePlan
+export interface PaymentType { 
   id: string;
   name: string;
   amount: number;
-  frequency: 'monthly' | 'quarterly' | 'annually'; // Payment Cycle
-  libraryName?: string; // Optional: for superadmin all-libraries view context
+  frequency: 'monthly' | 'quarterly' | 'annually'; 
+  libraryName?: string; 
 }
 
 export interface DashboardSummary {
   totalStudents: number;
   totalSeats: number;
   availableSeats: number;
-  monthlyIncome: number; // Monthly Earnings
-  studentsWithDues: number; // Renamed from feesDueToday
-  libraryName?: string; // Added for context
+  monthlyIncome: number; 
+  studentsWithDues: number; 
+  libraryName?: string; 
 }
 
 export interface LibraryMetadata {
   id: string;
   name: string;
-  createdAt: string; // ISO date string
+  createdAt: string; 
 }
 
 export interface UserMetadata {
-  id: string; // Firebase UID
+  id: string; 
   email: string;
   role: 'superadmin' | 'manager';
   displayName?: string;
@@ -70,4 +70,3 @@ export interface UserMetadata {
   assignedLibraryId?: string; 
   assignedLibraryName?: string; 
 }
-

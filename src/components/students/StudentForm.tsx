@@ -32,7 +32,9 @@ const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/web
 
 const studentFormSchema = z.object({
   fullName: z.string().min(2, { message: "Full name must be at least 2 characters." }).max(100),
-  contactDetails: z.string().email({ message: "Invalid email address." }),
+  aadhaarNumber: z.string().optional().or(z.literal('')).refine(val => val === '' || val === undefined || /^\d{12}$/.test(val), {
+    message: "Aadhaar Number must be 12 digits if provided.",
+  }),
   mobileNumber: z.string().optional().or(z.literal('')).refine(val => val === '' || val === undefined || /^\d{10}$/.test(val), {
     message: "Mobile number must be 10 digits if provided.",
   }),
@@ -41,7 +43,7 @@ const studentFormSchema = z.object({
   notes: z.string().max(500).optional().or(z.literal('')),
   seatId: z.string(),
   status: z.enum(["enrolled", "owing", "inactive"]),
-  amountPaidNow: z.coerce.number().min(0, { message: "Amount Paid Now cannot be negative." }), // Renamed from feesDue
+  amountPaidNow: z.coerce.number().min(0, { message: "Amount Paid Now cannot be negative." }),
   enrollmentDate: z.string().refine((date) => !isNaN(Date.parse(date)), { message: "Invalid date format." }),
   paymentTypeId: z.string(),
   photoUrl: z.string().url({ message: "Invalid URL for photo." }).optional().or(z.literal('')),
@@ -57,15 +59,15 @@ export type StudentFormValues = z.infer<typeof studentFormSchema>;
 
 export interface StudentSubmitValues {
   fullName: string;
-  contactDetails: string; // Email
+  aadhaarNumber?: string;
   mobileNumber?: string;
   fatherName?: string;
   address?: string;
   notes?: string;
   seatId?: string;
   status: 'enrolled' | 'owing' | 'inactive';
-  amountPaidNow: number; // Represents the amount paid in this transaction
-  feesDue?: number; // This will be calculated and set by the backend logic if needed, or passed if it's pre-existing.
+  amountPaidNow: number; 
+  feesDue?: number; 
   enrollmentDate: string;
   paymentTypeId?: string;
   photo?: File | string;
@@ -128,10 +130,11 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
     resolver: zodResolver(studentFormSchema),
     defaultValues: initialData ? {
       ...initialData,
+      aadhaarNumber: initialData.aadhaarNumber || "",
       mobileNumber: initialData.mobileNumber || "",
       fatherName: initialData.fatherName || "",
       address: initialData.address || "",
-      amountPaidNow: 0, // Default to 0 for existing students, admin enters payment if any
+      amountPaidNow: 0, 
       enrollmentDate: initialData.enrollmentDate || new Date().toISOString().split('T')[0],
       seatId: initialData.seatId || NONE_SELECT_VALUE,
       paymentTypeId: initialData.paymentTypeId || NONE_SELECT_VALUE,
@@ -142,7 +145,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
       idProofUpload: undefined,
     } : {
       fullName: "",
-      contactDetails: "",
+      aadhaarNumber: "",
       mobileNumber: "",
       fatherName: "",
       address: "",
@@ -200,12 +203,13 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
       
       const submissionData: StudentSubmitValues = {
         ...restOfFormValues,
+        aadhaarNumber: values.aadhaarNumber || undefined,
         seatId: values.seatId === NONE_SELECT_VALUE ? undefined : values.seatId,
         paymentTypeId: values.paymentTypeId === NONE_SELECT_VALUE ? undefined : values.paymentTypeId,
         mobileNumber: values.mobileNumber || undefined,
         fatherName: values.fatherName || undefined,
         address: values.address || undefined,
-        feesDue: initialData?.feesDue // Pass current actual feesDue for calculation backend
+        feesDue: initialData?.feesDue 
       };
 
       if (photoUpload && photoUpload.length > 0) {
@@ -266,12 +270,12 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField
                 control={form.control}
-                name="contactDetails"
+                name="aadhaarNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Contact Email</FormLabel>
+                    <FormLabel>Aadhaar Number (Optional)</FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder="student@example.com" {...field} />
+                      <Input type="text" placeholder="Enter 12-digit Aadhaar" {...field} value={field.value ?? ""} maxLength={12}/>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -501,4 +505,3 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
     </Card>
   );
 }
-

@@ -73,12 +73,12 @@ export default function StudentsPage() {
   const filteredStudents = useMemo(() => {
     return students.filter(student => {
       const nameMatch = student.fullName.toLowerCase().includes(searchTerm.toLowerCase());
-      let statusMatch = true; // Default to true if 'all'
-        if (statusFilter === 'enrolled') { // Active, Paid or Credit
+      let statusMatch = true; 
+        if (statusFilter === 'enrolled') { 
             statusMatch = student.status === 'enrolled';
-        } else if (statusFilter === 'owing') { // Has Dues
+        } else if (statusFilter === 'owing') { 
             statusMatch = student.status === 'owing';
-        } else if (statusFilter === 'inactive') { // Inactive
+        } else if (statusFilter === 'inactive') { 
             statusMatch = student.status === 'inactive';
         }
       return nameMatch && statusMatch;
@@ -87,14 +87,14 @@ export default function StudentsPage() {
 
   const getStatusBadgeVariant = (status: Student['status'], feesDue: number) => {
     if (status === 'inactive') return 'secondary';
-    if (feesDue > 0) return 'destructive'; // Owing
-    return 'default'; // Enrolled (Paid or Credit)
+    if (feesDue > 0) return 'destructive'; 
+    return 'default'; 
   };
   
   const getStatusBadgeText = (status: Student['status'], feesDue: number) => {
     if (status === 'inactive') return 'Inactive';
     if (feesDue > 0) return 'Has Dues';
-    if (feesDue < 0) return 'Credit'; // Student has overpaid
+    if (feesDue < 0) return 'Credit'; 
     return 'Active/Paid';
   };
 
@@ -106,8 +106,6 @@ export default function StudentsPage() {
 
   const getStudentSeatDisplay = (studentSeatId?: string, studentLibraryName?: string) => {
     if (!studentSeatId) return 'N/A';
-    // In "All Libraries" view, seats might not be loaded with libraryName unless getSeats is modified.
-    // For now, rely on seatId being unique enough or student having libraryName if seats are fetched per library context.
     const seat = seats.find(s => s.id === studentSeatId && (isSuperAdmin && !currentLibraryId ? s.libraryName === studentLibraryName : true));
     return seat ? `${seat.seatNumber} (${seat.floor}${isSuperAdmin && !currentLibraryId && seat.libraryName ? ` - ${seat.libraryName}` : ''})` : 'N/A';
   };
@@ -167,7 +165,7 @@ export default function StudentsPage() {
           </Select>
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="w-full sm:w-auto"> {/* Wrapper div for Tooltip when button is disabled */}
+              <div className="w-full sm:w-auto"> 
                 <Link href="/students/add" passHref legacyBehavior>
                   <Button className="w-full" disabled={!canPerformActions} aria-disabled={!canPerformActions}>
                     <PlusCircle className="mr-2 h-4 w-4" /> Add Student
@@ -192,7 +190,7 @@ export default function StudentsPage() {
                 <TableHead>Photo</TableHead>
                 <TableHead>Full Name</TableHead>
                 {isSuperAdmin && !currentLibraryId && <TableHead>Library</TableHead>}
-                <TableHead>Contact</TableHead>
+                <TableHead>Aadhaar Number</TableHead>
                 <TableHead>Seat</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Current Balance</TableHead>
@@ -210,7 +208,7 @@ export default function StudentsPage() {
                   </TableCell>
                   <TableCell className="font-medium">{student.fullName}</TableCell>
                   {isSuperAdmin && !currentLibraryId && <TableCell>{student.libraryName || 'N/A'}</TableCell>}
-                  <TableCell>{student.contactDetails}</TableCell>
+                  <TableCell>{student.aadhaarNumber || 'N/A'}</TableCell>
                   <TableCell>{getStudentSeatDisplay(student.seatId, student.libraryName)}</TableCell>
                   <TableCell>
                     <Badge variant={getStatusBadgeVariant(student.status, student.feesDue)} className="capitalize">
@@ -273,4 +271,3 @@ export default function StudentsPage() {
     </TooltipProvider>
   );
 }
-

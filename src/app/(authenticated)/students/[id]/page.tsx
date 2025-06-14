@@ -10,18 +10,18 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Edit, DollarSign, Loader2, User, Mail, StickyNote, Armchair, CalendarDays, Briefcase, Phone, Home, UserCircle2, AlertTriangle, Library } from 'lucide-react';
+import { ArrowLeft, Edit, DollarSign, Loader2, User, StickyNote, Armchair, CalendarDays, Briefcase, Phone, Home, UserCircle2, AlertTriangle, Library, Fingerprint } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
-import { useToast } from '@/hooks/use-toast'; // Added useToast import
+import { useToast } from '@/hooks/use-toast'; 
 
 export default function StudentDetailPage() {
   const params = useParams();
   const router = useRouter();
   const studentId = params.id as string;
   const { currentLibraryId, currentLibraryName, loading: authLoading } = useAuth();
-  const { toast } = useToast(); // Initialized toast
+  const { toast } = useToast(); 
 
   const [student, setStudent] = useState<Student | null>(null);
   const [assignedSeat, setAssignedSeat] = useState<Seat | null>(null);
@@ -67,7 +67,7 @@ export default function StudentDetailPage() {
       };
       fetchData();
     } else if (!authLoading && !currentLibraryId) {
-        setLoadingData(false); // Stop loading if no library context
+        setLoadingData(false); 
         toast({ title: "Context Error", description: "No library selected to view student details.", variant: "destructive" });
     }
   }, [studentId, currentLibraryId, authLoading, router, currentLibraryName, toast]);
@@ -75,7 +75,7 @@ export default function StudentDetailPage() {
   const getStatusBadgeVariant = (status: Student['status'] | undefined, feesDue: number | undefined) => {
     if (status === 'inactive') return 'secondary';
     if (feesDue !== undefined && feesDue > 0) return 'destructive';
-    return 'default'; // enrolled or credit
+    return 'default'; 
   };
   
   const getStatusBadgeText = (status: Student['status'] | undefined, feesDue: number | undefined) => {
@@ -152,7 +152,7 @@ export default function StudentDetailPage() {
         <CardContent className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="space-y-4 md:col-span-2">
             <h3 className="text-lg font-semibold text-foreground border-b pb-2 mb-3">Contact & Personal Info</h3>
-            <InfoItem icon={Mail} label="Contact Email" value={student.contactDetails} />
+            {student.aadhaarNumber && <InfoItem icon={Fingerprint} label="Aadhaar Number" value={student.aadhaarNumber} />}
             {student.mobileNumber && <InfoItem icon={Phone} label="Mobile Number" value={student.mobileNumber} />}
             {student.fatherName && <InfoItem icon={UserCircle2} label="Father's Name" value={student.fatherName} />}
             {student.address && <InfoItem icon={Home} label="Address" value={student.address} />}
@@ -229,4 +229,3 @@ function InfoItem({ icon: Icon, label, value, className }: InfoItemProps) {
     </div>
   );
 }
-
