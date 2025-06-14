@@ -25,7 +25,6 @@ import { Loader2, Eye } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getSeats, getPaymentTypes } from "@/lib/data";
 import Image from "next/image";
-// Removed useAuth import as isSuperAdmin check is no longer needed here for library selection
 
 const NONE_SELECT_VALUE = "__NONE__";
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -42,7 +41,7 @@ const studentFormSchema = z.object({
   notes: z.string().max(500).optional().or(z.literal('')),
   seatId: z.string(),
   status: z.enum(["enrolled", "owing", "inactive"]),
-  feesDue: z.coerce.number().min(0, { message: "Amount to Pay cannot be negative." }),
+  amountPaidNow: z.coerce.number().min(0, { message: "Amount Paid Now cannot be negative." }), // Renamed from feesDue
   enrollmentDate: z.string().refine((date) => !isNaN(Date.parse(date)), { message: "Invalid date format." }),
   paymentTypeId: z.string(),
   photoUrl: z.string().url({ message: "Invalid URL for photo." }).optional().or(z.literal('')),
@@ -65,7 +64,8 @@ export interface StudentSubmitValues {
   notes?: string;
   seatId?: string;
   status: 'enrolled' | 'owing' | 'inactive';
-  feesDue: number;
+  amountPaidNow: number; // Represents the amount paid in this transaction
+  feesDue?: number; // This will be calculated and set by the backend logic if needed, or passed if it's pre-existing.
   enrollmentDate: string;
   paymentTypeId?: string;
   photo?: File | string;
@@ -76,7 +76,7 @@ interface StudentFormProps {
   initialData?: Student;
   onSubmit: (values: StudentSubmitValues) => Promise<void>;
   isSubmitting: boolean;
-  currentLibraryId: string | null; // User's current global library context, or target library for adding
+  currentLibraryId: string | null;
 }
 
 export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibraryId }: StudentFormProps) {
@@ -90,8 +90,6 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
   const [photoPreview, setPhotoPreview] = useState<string | null>(initialData?.photoUrl || null);
   const [idProofFileName, setIdProofFileName] = useState<string | null>(initialData?.idProofUrl ? "Existing ID Proof" : null);
 
-  // The library ID to use for fetching seats and payment types is now always currentLibraryId
-  // as the parent component (add/edit page) determines the correct context.
   const libraryIdForDropdowns = currentLibraryId;
 
   useEffect(() => {
@@ -100,7 +98,6 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
         setLoadingDropdownData(false);
         setAvailableSeats([]);
         setPaymentTypes([]);
-        // Only toast if context was expected for an existing student or manager adding
         if (initialData) { 
              toast({ title: "Error", description: "Library context not available for fetching form options.", variant: "destructive"});
         }
@@ -134,7 +131,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
       mobileNumber: initialData.mobileNumber || "",
       fatherName: initialData.fatherName || "",
       address: initialData.address || "",
-      feesDue: initialData.feesDue || 0,
+      amountPaidNow: 0, // Default to 0 for existing students, admin enters payment if any
       enrollmentDate: initialData.enrollmentDate || new Date().toISOString().split('T')[0],
       seatId: initialData.seatId || NONE_SELECT_VALUE,
       paymentTypeId: initialData.paymentTypeId || NONE_SELECT_VALUE,
@@ -154,7 +151,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
       notes: "",
       seatId: NONE_SELECT_VALUE,
       status: "enrolled",
-      feesDue: 0,
+      amountPaidNow: 0,
       enrollmentDate: new Date().toISOString().split('T')[0],
       paymentTypeId: NONE_SELECT_VALUE,
       photoUpload: undefined,
@@ -162,11 +159,8 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
     },
   });
 
-  // Reset seatId and paymentTypeId if the library for dropdowns changes in "add" mode.
   useEffect(() => {
     if (!initialData && libraryIdForDropdowns) { 
-        // If we are in add mode and the library context changes (e.g. superadmin switches global context)
-        // re-fetch dropdowns and reset selections.
         form.resetField("seatId", { defaultValue: NONE_SELECT_VALUE });
         form.resetField("paymentTypeId", { defaultValue: NONE_SELECT_VALUE });
     }
@@ -211,6 +205,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
         mobileNumber: values.mobileNumber || undefined,
         fatherName: values.fatherName || undefined,
         address: values.address || undefined,
+        feesDue: initialData?.feesDue // Pass current actual feesDue for calculation backend
       };
 
       if (photoUpload && photoUpload.length > 0) {
@@ -236,6 +231,13 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
   };
   
   const isFormEffectivelyDisabled = isSubmitting || loadingDropdownData || !libraryIdForDropdowns;
+
+  const formatFeesDueDisplay = (fees: number | undefined) => {
+    if (fees === undefined || fees === null) return "N/A";
+    if (fees < 0) return `INR ${(-fees).toFixed(2)} (Credit)`;
+    if (fees > 0) return `INR ${fees.toFixed(2)} (Due)`;
+    return "INR 0.00 (Cleared)";
+  };
 
 
   return (
@@ -408,7 +410,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="enrolled">Active</SelectItem>
+                        <SelectItem value="enrolled">Active (Paid/Credit)</SelectItem>
                         <SelectItem value="owing">Has Dues</SelectItem>
                         <SelectItem value="inactive">Inactive</SelectItem>
                       </SelectContent>
@@ -418,13 +420,22 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
                 )}
               />
             </div>
+
+            {initialData && (
+              <FormItem>
+                <FormLabel>Current Balance</FormLabel>
+                <Input value={formatFeesDueDisplay(initialData.feesDue)} readOnly className="bg-muted/50 border-dashed" />
+                <FormDescription>This is the student's current account balance before this transaction.</FormDescription>
+              </FormItem>
+            )}
+
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField
                 control={form.control}
-                name="feesDue"
+                name="amountPaidNow"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Amount to Pay (INR)</FormLabel>
+                    <FormLabel>Amount Paid Now (INR)</FormLabel>
                     <FormControl>
                       <Input type="number" placeholder="0.00" {...field} />
                     </FormControl>
@@ -445,7 +456,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value={NONE_SELECT_VALUE}>No Payment Type</SelectItem>
+                        <SelectItem value={NONE_SELECT_VALUE}>No Payment Type / Custom Payment</SelectItem>
                         {paymentTypes.map(plan => (
                           <SelectItem key={plan.id} value={plan.id}>
                             {plan.name} (INR{plan.amount}/{plan.frequency})
@@ -456,6 +467,7 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
                         )}
                       </SelectContent>
                     </Select>
+                    <FormDescription>If a payment type is selected, its amount will be charged for the current period.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -489,3 +501,4 @@ export function StudentForm({ initialData, onSubmit, isSubmitting, currentLibrar
     </Card>
   );
 }
+

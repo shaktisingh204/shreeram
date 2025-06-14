@@ -14,12 +14,14 @@ import { ArrowLeft, Edit, DollarSign, Loader2, User, Mail, StickyNote, Armchair,
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/hooks/use-toast'; // Added useToast import
 
 export default function StudentDetailPage() {
   const params = useParams();
   const router = useRouter();
   const studentId = params.id as string;
   const { currentLibraryId, currentLibraryName, loading: authLoading } = useAuth();
+  const { toast } = useToast(); // Initialized toast
 
   const [student, setStudent] = useState<Student | null>(null);
   const [assignedSeat, setAssignedSeat] = useState<Seat | null>(null);
@@ -48,7 +50,8 @@ export default function StudentDetailPage() {
           }
 
           const paymentData = await getPayments(currentLibraryId); 
-          setPayments(paymentData.filter(p => p.studentId === studentId));
+          setPayments(paymentData.filter(p => p.studentId === studentId).sort((a,b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime()));
+
 
           if (studentData.paymentTypeId) { 
             const planData = await getPaymentTypeById(currentLibraryId, studentData.paymentTypeId); 
@@ -63,20 +66,31 @@ export default function StudentDetailPage() {
         }
       };
       fetchData();
+    } else if (!authLoading && !currentLibraryId) {
+        setLoadingData(false); // Stop loading if no library context
+        toast({ title: "Context Error", description: "No library selected to view student details.", variant: "destructive" });
     }
-  }, [studentId, currentLibraryId, authLoading, router, currentLibraryName]);
+  }, [studentId, currentLibraryId, authLoading, router, currentLibraryName, toast]);
   
-  const getStatusBadgeVariant = (status: Student['status'] | undefined) => {
-    if (!status) return 'outline';
-    switch (status) {
-      case 'enrolled': return 'default';
-      case 'owing': return 'destructive';
-      case 'inactive': return 'secondary';
-      default: return 'outline';
-    }
+  const getStatusBadgeVariant = (status: Student['status'] | undefined, feesDue: number | undefined) => {
+    if (status === 'inactive') return 'secondary';
+    if (feesDue !== undefined && feesDue > 0) return 'destructive';
+    return 'default'; // enrolled or credit
   };
   
-  const toast = (opts: any) => console.log("Toast:", opts.title, opts.description); // Placeholder
+  const getStatusBadgeText = (status: Student['status'] | undefined, feesDue: number | undefined) => {
+    if (status === 'inactive') return 'Inactive';
+    if (feesDue !== undefined && feesDue > 0) return 'Has Dues';
+    if (feesDue !== undefined && feesDue < 0) return 'Credit';
+    return 'Active/Paid';
+  };
+
+  const formatFeesDueDisplay = (fees: number | undefined) => {
+    if (fees === undefined) return "N/A";
+    if (fees < 0) return `INR ${(-fees).toFixed(2)} (Credit)`;
+    if (fees > 0) return `INR ${fees.toFixed(2)} (Due)`;
+    return "INR 0.00 (Cleared)";
+  };
 
 
   if (authLoading || loadingData) {
@@ -89,7 +103,7 @@ export default function StudentDetailPage() {
   
   if (!currentLibraryId) {
     return (
-      <div className="flex flex-col justify-center items-center h-full text-center">
+      <div className="flex flex-col justify-center items-center h-full text-center p-4">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
         <p className="text-xl font-semibold">No Library Selected</p>
         <p className="text-muted-foreground">A library context is required to view student details. Please select a library.</p>
@@ -130,8 +144,8 @@ export default function StudentDetailPage() {
               {student.fatherName && <span className="mx-1.5">|</span>}
               {student.fatherName && <span>S/o {student.fatherName}</span>}
             </div>
-            <Badge variant={getStatusBadgeVariant(student.status)} className="capitalize mt-2 text-sm">
-              {student.status === 'owing' ? 'Has Dues' : student.status}
+            <Badge variant={getStatusBadgeVariant(student.status, student.feesDue)} className="capitalize mt-2 text-sm">
+              {getStatusBadgeText(student.status, student.feesDue)}
             </Badge>
           </div>
         </CardHeader>
@@ -148,7 +162,7 @@ export default function StudentDetailPage() {
           </div>
           <div className="space-y-4 md:col-span-1">
             <h3 className="text-lg font-semibold text-foreground border-b pb-2 mb-3">Fee Details</h3>
-            <InfoItem icon={DollarSign} label="Amount to Pay" value={`INR${student.feesDue.toFixed(2)}`} className={student.feesDue > 0 ? "text-destructive font-bold" : ""} />
+            <InfoItem icon={DollarSign} label="Current Balance" value={formatFeesDueDisplay(student.feesDue)} className={student.feesDue > 0 ? "text-destructive font-bold" : (student.feesDue < 0 ? "text-green-600 font-bold" : "")} />
             {student.lastPaymentDate && <InfoItem icon={CalendarDays} label="Last Payment" value={new Date(student.lastPaymentDate).toLocaleDateString()} />}
             {paymentType && <InfoItem icon={Briefcase} label="Payment Type" value={`${paymentType.name} (INR${paymentType.amount}/${paymentType.frequency})`} />}
           </div>
@@ -215,3 +229,4 @@ function InfoItem({ icon: Icon, label, value, className }: InfoItemProps) {
     </div>
   );
 }
+

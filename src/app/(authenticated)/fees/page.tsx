@@ -73,11 +73,9 @@ export default function FeeCollectionPage() {
       setLoadingData(true);
       return;
     }
-    // Superadmin in "All Libraries" view (currentLibraryId is null) OR a manager with a specific libraryId
     if(isSuperAdmin || currentLibraryId) {
       setLoadingData(true);
       try {
-        // Pass currentLibraryId (can be null for superadmin to fetch all)
         const studentData = await getStudents(currentLibraryId);
         const paymentData = await getPayments(currentLibraryId);
         const paymentTypeData = await getPaymentTypes(currentLibraryId);
@@ -92,7 +90,7 @@ export default function FeeCollectionPage() {
       } finally {
         setLoadingData(false);
       }
-    } else { // Manager without libraryId
+    } else { 
         setLoadingData(false);
         setStudents([]);
         setPayments([]);
@@ -109,7 +107,7 @@ export default function FeeCollectionPage() {
       const nameMatch = student.fullName.toLowerCase().includes(searchTerm.toLowerCase());
       let statusMatch = true;
       if (statusFilter === 'hasDues') statusMatch = student.feesDue > 0 && student.status !== 'inactive';
-      else if (statusFilter === 'allPaid') statusMatch = student.feesDue === 0 && student.status === 'enrolled';
+      else if (statusFilter === 'allPaid') statusMatch = student.feesDue <= 0 && student.status === 'enrolled'; // <= 0 for paid or credit
       else if (statusFilter === 'inactive') statusMatch = student.status === 'inactive';
       
       return nameMatch && statusMatch;
@@ -123,10 +121,11 @@ export default function FeeCollectionPage() {
       return;
     }
     setCurrentStudent(student);
-    const studentPaymentType = paymentTypes.find(fp => fp.id === student.paymentTypeId && (!isSuperAdmin || fp.libraryName === student.libraryName) ); // Match library if SA All view
+    // Default payment amount to their current dues if positive, otherwise a sensible default (e.g., 0 or typical plan amount)
+    const defaultAmount = student.feesDue > 0 ? student.feesDue : 0; 
     setPaymentFormData({
       studentId: student.id,
-      amount: student.feesDue > 0 ? student.feesDue : (studentPaymentType?.amount || 0),
+      amount: defaultAmount,
       paymentDate: new Date().toISOString().split('T')[0],
       notes: '',
     });
@@ -140,7 +139,7 @@ export default function FeeCollectionPage() {
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentStudent || !currentLibraryId) { // Action requires specific library
+    if (!currentStudent || !currentLibraryId) { 
         toast({ title: "Error", description: "A specific library context is required to add a payment.", variant: "destructive" });
         return;
     }
@@ -151,7 +150,7 @@ export default function FeeCollectionPage() {
         amount: Number(paymentFormData.amount), 
         paymentDate: paymentFormData.paymentDate,
         notes: paymentFormData.notes,
-      });
+      }, currentStudent.fullName); // Pass student name to avoid refetch in addPayment
       toast({ title: "Success", description: "Payment added successfully." });
       await fetchData(); 
       setIsPaymentDialogOpen(false);
@@ -163,7 +162,7 @@ export default function FeeCollectionPage() {
   };
 
   const markAsPaid = async (studentId: string) => {
-    if (!currentLibraryId) { // Action requires specific library
+    if (!currentLibraryId) { 
        toast({ title: "Error", description: "A specific library context is required to clear dues.", variant: "destructive" });
        return;
     }
@@ -181,14 +180,32 @@ export default function FeeCollectionPage() {
 
   const getStudentPayments = () => {
     if (!currentStudent) return [];
-    // For SA all-libraries view, filter payments for that student, potentially across all their records if IDs are same (unlikely)
-    // For now, assuming student ID is globally unique or filtered by currentStudent.libraryName if available
     return payments.filter(p => p.studentId === currentStudent.id).sort((a,b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime());
   };
   
   const getStudentPaymentTypeName = (student: Student) => {
     const plan = paymentTypes.find(fp => fp.id === student.paymentTypeId && (!isSuperAdmin || fp.libraryName === student.libraryName));
     return plan ? `${plan.name} (INR${plan.amount})` : 'No Plan';
+  };
+
+  const formatFeesDueDisplay = (fees: number | undefined) => {
+    if (fees === undefined) return { text: "N/A", className: ""};
+    if (fees < 0) return { text: `INR ${(-fees).toFixed(2)} (Credit)`, className: "text-green-600 font-semibold" };
+    if (fees > 0) return { text: `INR ${fees.toFixed(2)} (Due)`, className: "text-destructive font-semibold" };
+    return { text: "INR 0.00 (Cleared)", className: "text-green-600" };
+  };
+  
+  const getStatusBadgeVariant = (status: Student['status'] | undefined, feesDue: number | undefined) => {
+    if (status === 'inactive') return 'secondary';
+    if (feesDue !== undefined && feesDue > 0) return 'destructive'; // Owing
+    return 'default'; // Enrolled (Paid or Credit)
+  };
+  
+  const getStatusBadgeText = (status: Student['status'] | undefined, feesDue: number | undefined) => {
+    if (status === 'inactive') return 'Inactive';
+    if (feesDue !== undefined && feesDue > 0) return 'Has Dues';
+    if (feesDue !== undefined && feesDue < 0) return 'Credit'; // Student has overpaid
+    return 'Active/Paid';
   };
   
   if (authLoading || loadingData) {
@@ -211,7 +228,7 @@ export default function FeeCollectionPage() {
   }
 
   const pageTitle = isSuperAdmin && !currentLibraryId ? "All Fee Collections (All Libraries)" : `Fee Collection (${currentLibraryName || 'Selected Library'})`;
-  const canManageFees = !!currentLibraryId; // Actions require a specific library context
+  const canManageFees = !!currentLibraryId; 
 
   return (
     <div className="space-y-6">
@@ -239,7 +256,7 @@ export default function FeeCollectionPage() {
             <SelectContent>
               <SelectItem value="all">All Students</SelectItem>
               <SelectItem value="hasDues">Has Dues</SelectItem>
-              <SelectItem value="allPaid">All Paid</SelectItem>
+              <SelectItem value="allPaid">Paid / Credit</SelectItem>
               <SelectItem value="inactive">Inactive</SelectItem>
             </SelectContent>
           </Select>
@@ -249,7 +266,7 @@ export default function FeeCollectionPage() {
       <Card className="shadow-xl">
         <CardHeader>
           <CardTitle>Student Fee Status</CardTitle>
-          <CardDescription>See student payments and amounts to pay {currentLibraryName ? `for ${currentLibraryName}` : (isSuperAdmin ? "across all libraries" : "")}.</CardDescription>
+          <CardDescription>See student payments and balances {currentLibraryName ? `for ${currentLibraryName}` : (isSuperAdmin ? "across all libraries" : "")}.</CardDescription>
         </CardHeader>
         <CardContent>
         {filteredStudents.length > 0 ? (
@@ -260,25 +277,27 @@ export default function FeeCollectionPage() {
                   <TableHead>Student Name</TableHead>
                   {isSuperAdmin && !currentLibraryId && <TableHead>Library</TableHead>}
                   <TableHead>Payment Type</TableHead>
-                  <TableHead>Amount to Pay</TableHead>
+                  <TableHead>Current Balance</TableHead>
                   <TableHead>Last Payment</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredStudents.map((student) => (
+                {filteredStudents.map((student) => {
+                  const balanceDisplay = formatFeesDueDisplay(student.feesDue);
+                  return (
                   <TableRow key={student.id}>
                     <TableCell className="font-medium">{student.fullName}</TableCell>
                     {isSuperAdmin && !currentLibraryId && <TableCell>{student.libraryName || 'N/A'}</TableCell>}
                     <TableCell>{getStudentPaymentTypeName(student)}</TableCell>
-                    <TableCell className={student.feesDue > 0 ? 'text-destructive font-semibold' : 'text-green-600'}>
-                      INR{student.feesDue.toFixed(2)}
+                    <TableCell className={balanceDisplay.className}>
+                      {balanceDisplay.text}
                     </TableCell>
                     <TableCell>{student.lastPaymentDate ? new Date(student.lastPaymentDate).toLocaleDateString() : 'N/A'}</TableCell>
                     <TableCell>
-                      <Badge variant={student.feesDue > 0 && student.status !== 'inactive' ? 'destructive' : (student.status === 'inactive' ? 'secondary' : 'default')} className="capitalize">
-                        {student.status === 'inactive' ? 'Inactive' : (student.feesDue > 0 ? 'Has Dues' : 'Paid')}
+                      <Badge variant={getStatusBadgeVariant(student.status, student.feesDue)} className="capitalize">
+                        {getStatusBadgeText(student.status, student.feesDue)}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
@@ -308,7 +327,8 @@ export default function FeeCollectionPage() {
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -337,16 +357,17 @@ export default function FeeCollectionPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Payment for {currentStudent?.fullName}</DialogTitle>
-            <DialogDescription>Record a new payment for this student. This will apply to {currentLibraryName || "the selected library context"}.</DialogDescription>
+            <DialogDescription>Record a new payment for this student. This will apply to {currentLibraryName || "the selected library context"}. Current balance: {formatFeesDueDisplay(currentStudent?.feesDue).text}</DialogDescription>
           </DialogHeader>
           <form onSubmit={handlePaymentSubmit}>
             <div className="space-y-4 py-4">
               <div>
-                <Label htmlFor="amount">Amount (INR)</Label>
+                <Label htmlFor="amount">Amount Paid (INR)</Label>
                 <Input
                   id="amount"
                   type="number"
                   step="0.01"
+                  min="0"
                   value={paymentFormData.amount}
                   onChange={(e) => setPaymentFormData({ ...paymentFormData, amount: parseFloat(e.target.value) || 0 })}
                   required
