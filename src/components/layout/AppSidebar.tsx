@@ -25,7 +25,7 @@ import {
   BookOpenCheck,
   Library,
   UsersRound, 
-  DatabaseZap, // For Admin Utilities
+  DatabaseZap, // For Admin Utilities -> Export Data
 } from 'lucide-react';
 
 const navItemsBase = [
@@ -41,7 +41,7 @@ const superAdminNavItems = [
   ...navItemsBase,
   { href: '/manage-libraries', label: 'Manage Libraries', icon: Library },
   { href: '/manage-users', label: 'Manage Users', icon: UsersRound },
-  { href: '/admin-utils', label: 'Admin Utilities', icon: DatabaseZap }, 
+  { href: '/admin-utils', label: 'Export Data', icon: DatabaseZap }, 
 ];
 
 const managerNavItems = navItemsBase;

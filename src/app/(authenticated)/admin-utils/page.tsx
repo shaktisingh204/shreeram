@@ -153,7 +153,7 @@ export default function AdminUtilitiesPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-3xl font-headline font-bold text-primary">Admin Utilities</h1>
+      <h1 className="text-3xl font-headline font-bold text-primary">Export Data</h1>
 
       <Card className="shadow-xl">
         <CardHeader>
