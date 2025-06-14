@@ -5,9 +5,9 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/context/AuthContext';
-import { getStudents, getSeats, getPayments, getPaymentTypes, getLibrariesMetadata, getUsersMetadata } from '@/lib/data'; // Assuming these functions can fetch all data when libraryId is null for SA
+import { getStudents, getSeats, getPayments, getPaymentTypes, getLibrariesMetadata, getUsersMetadata } from '@/lib/data';
 import type { Student, Seat, FeePayment, PaymentType, LibraryMetadata, UserMetadata } from '@/types';
-import { Loader2, Download, ShieldAlert, ExternalLink, DatabaseBackup } from 'lucide-react';
+import { Loader2, Download, ShieldAlert } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx'; // For Excel export
 
@@ -31,7 +31,6 @@ export default function AdminUtilitiesPage() {
       switch (dataType) {
         case 'students':
           data = await getStudents(libraryContextForFetch);
-          // Select and rename columns for clarity in Excel
           data = data.map((s: Student) => ({
             "Student ID": s.id,
             "Full Name": s.fullName,
@@ -197,47 +196,6 @@ export default function AdminUtilitiesPage() {
         </CardContent>
         <CardFooter>
             <p className="text-xs text-muted-foreground">Exports are generated on your browser. For large datasets, this may take a moment.</p>
-        </CardFooter>
-      </Card>
-
-      <Card className="shadow-xl">
-        <CardHeader>
-          <CardTitle className="font-headline text-xl text-primary flex items-center"><DatabaseBackup className="mr-2 h-5 w-5"/>Data Backup Information</CardTitle>
-          <CardDescription>
-            Guidance on how to back up your application data using Firebase's built-in features.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <p>
-            Your application data is stored in Firebase Realtime Database. Firebase provides robust, built-in mechanisms for backing up your data. It is highly recommended to use these official Firebase features for data integrity and disaster recovery.
-          </p>
-          <p>
-            <strong>Manual Backups:</strong> You can export your database as a JSON file directly from the Firebase Console.
-          </p>
-          <ol className="list-decimal list-inside space-y-1 pl-4">
-            <li>Go to your <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Firebase Project Console <ExternalLink className="inline-block h-3 w-3 ml-0.5"/></a>.</li>
-            <li>Navigate to "Build" &gt; "Realtime Database".</li>
-            <li>Click the three-dot menu (⋮) at the top right of the data viewer.</li>
-            <li>Select "Export JSON".</li>
-          </ol>
-          <p>
-            <strong>Automated Backups:</strong> For regular, automated backups, Firebase allows you to set up daily backups to a Google Cloud Storage bucket. This is a paid feature and requires upgrading your Firebase project to the "Blaze" (pay-as-you-go) plan.
-          </p>
-           <ol className="list-decimal list-inside space-y-1 pl-4">
-            <li>In the Firebase Console, go to "Realtime Database" &gt; "Backups" tab.</li>
-            <li>Follow the instructions to enable automated backups. You'll need to have a Google Cloud Storage bucket ready.</li>
-          </ol>
-          <p>
-            <strong>Important:</strong>
-            The "Export to Excel" features provided above are for data extraction and reporting, not as a substitute for comprehensive database backups. Always rely on Firebase's backup solutions for complete data protection.
-          </p>
-        </CardContent>
-         <CardFooter>
-             <a href="https://firebase.google.com/docs/database/backups" target="_blank" rel="noopener noreferrer">
-                <Button variant="link" className="p-0 h-auto">
-                    Learn more about Firebase Database Backups <ExternalLink className="inline-block h-4 w-4 ml-1"/>
-                </Button>
-            </a>
         </CardFooter>
       </Card>
     </div>
