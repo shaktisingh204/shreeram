@@ -24,7 +24,8 @@ import {
   Settings,
   BookOpenCheck,
   Library,
-  UsersRound, // Added for Manage Users
+  UsersRound, 
+  DatabaseZap, // For Admin Utilities
 } from 'lucide-react';
 
 const navItemsBase = [
@@ -40,6 +41,7 @@ const superAdminNavItems = [
   ...navItemsBase,
   { href: '/manage-libraries', label: 'Manage Libraries', icon: Library },
   { href: '/manage-users', label: 'Manage Users', icon: UsersRound },
+  { href: '/admin-utils', label: 'Admin Utilities', icon: DatabaseZap }, 
 ];
 
 const managerNavItems = navItemsBase;
