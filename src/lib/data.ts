@@ -4,10 +4,15 @@ import { ref, get, set, push, child, update, remove, query, orderByChild, equalT
 import type { Student, Seat, PaymentType, FeePayment, DashboardSummary, LibraryMetadata, UserMetadata } from '@/types';
 
 // Helper function to convert Firebase snapshot to array
-const snapshotToAray = <T>(snapshot: any): T[] => {
+const snapshotToAray = <T>(snapshot: any, libraryId?: string, libraryName?: string): T[] => {
   const items: T[] = [];
   snapshot.forEach((childSnapshot: any) => {
-    items.push({ id: childSnapshot.key, ...childSnapshot.val() } as T);
+    const itemData = { id: childSnapshot.key, ...childSnapshot.val() };
+    if (libraryId && libraryName) {
+      (itemData as any).libraryId = libraryId;
+      (itemData as any).libraryName = libraryName;
+    }
+    items.push(itemData as T);
   });
   return items;
 };
@@ -99,10 +104,10 @@ export const deleteLibrary = async (libraryIdToDelete: string): Promise<void> =>
 
 
 // --- Library-Specific Data Operations ---
-const ensureSingleLibraryId = (libraryId: string | null): string => {
+const ensureSingleLibraryId = (libraryId: string | null, operation?: string): string => {
   if (!libraryId) {
-    console.error("Attempted data operation requiring a single libraryId without one.");
-    throw new Error("A specific library context is required for this operation.");
+    console.error(`Attempted data operation (${operation || 'unknown'}) requiring a single libraryId without one.`);
+    throw new Error(`A specific library context is required for this operation: ${operation}.`);
   }
   return libraryId;
 };
@@ -117,9 +122,7 @@ export const getStudents = async (libraryId: string | null): Promise<Student[]> 
       const studentsRef = ref(db, `libraries/${libMeta.id}/students`);
       const snapshot = await get(studentsRef);
       if (snapshot.exists()) {
-        snapshot.forEach(childSnapshot => {
-          combinedStudents.push({ id: childSnapshot.key, ...childSnapshot.val(), libraryName: libMeta.name } as Student);
-        });
+        combinedStudents.push(...snapshotToAray<Student>(snapshot, libMeta.id, libMeta.name));
       }
     }
     return combinedStudents;
@@ -127,18 +130,18 @@ export const getStudents = async (libraryId: string | null): Promise<Student[]> 
     const studentsRef = ref(db, `libraries/${libraryId}/students`);
     const snapshot = await get(studentsRef);
     if (snapshot.exists()) {
-      return snapshotToAray<Student>(snapshot);
+      return snapshotToAray<Student>(snapshot, libraryId, (await getLibraryById(libraryId))?.name);
     }
     return [];
   }
 };
 
 export const getStudentById = async (libraryId: string, studentId: string): Promise<Student | undefined> => {
-  const currentLibraryId = ensureSingleLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId, "getStudentById");
   const studentRef = ref(db, `libraries/${currentLibraryId}/students/${studentId}`);
   const snapshot = await get(studentRef);
   if (snapshot.exists()) {
-    return { id: snapshot.key, ...snapshot.val() } as Student;
+    return { id: snapshot.key, ...snapshot.val(), libraryId: currentLibraryId, libraryName: (await getLibraryById(currentLibraryId))?.name } as Student;
   }
   return undefined;
 };
@@ -153,7 +156,7 @@ interface StudentDataInput {
   seatId?: string;
   status: 'enrolled' | 'owing' | 'inactive';
   amountPaidNow: number; 
-  feesDue?: number; 
+  feesDue?: number; // Current balance for existing student, undefined for new
   enrollmentDate: string;
   paymentTypeId?: string;
   photo?: File | string;
@@ -161,7 +164,7 @@ interface StudentDataInput {
 }
 
 export const addStudent = async (libraryId: string, studentData: StudentDataInput): Promise<Student> => {
-  const currentLibraryId = ensureSingleLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId, "addStudent");
   let finalPhotoUrl: string | undefined = undefined;
   if (typeof studentData.photo === 'string' && studentData.photo) {
     finalPhotoUrl = studentData.photo;
@@ -183,8 +186,9 @@ export const addStudent = async (libraryId: string, studentData: StudentDataInpu
   if (!newStudentId) throw new Error("Failed to generate student ID.");
 
   let paymentTypeCharge = 0;
-  if (studentData.paymentTypeId && studentData.paymentTypeId !== '__NONE__') {
-    const pt = await getPaymentTypeById(currentLibraryId, studentData.paymentTypeId);
+  const studentPaymentTypeId = studentData.paymentTypeId === '__NONE__' ? undefined : studentData.paymentTypeId;
+  if (studentPaymentTypeId) {
+    const pt = await getPaymentTypeById(currentLibraryId, studentPaymentTypeId);
     if (pt) paymentTypeCharge = pt.amount;
   }
 
@@ -194,7 +198,7 @@ export const addStudent = async (libraryId: string, studentData: StudentDataInpu
     finalStatus = netBalance > 0 ? 'owing' : 'enrolled';
   }
 
-  const newStudentData: Omit<Student, 'id' | 'feesDue' | 'status'> & { id?: string; feesDue: number; status: Student['status'] } = {
+  const newStudentPartialData: Omit<Student, 'id' | 'libraryName' | 'libraryId'> = {
     fullName: studentData.fullName,
     aadhaarNumber: studentData.aadhaarNumber || undefined,
     mobileNumber: studentData.mobileNumber || undefined,
@@ -203,7 +207,7 @@ export const addStudent = async (libraryId: string, studentData: StudentDataInpu
     notes: studentData.notes || undefined,
     seatId: studentData.seatId === '__NONE__' ? undefined : studentData.seatId,
     enrollmentDate: studentData.enrollmentDate,
-    paymentTypeId: studentData.paymentTypeId === '__NONE__' ? undefined : studentData.paymentTypeId,
+    paymentTypeId: studentPaymentTypeId,
     photoUrl: finalPhotoUrl,
     idProofUrl: finalIdProofUrl,
     feesDue: netBalance,
@@ -212,9 +216,11 @@ export const addStudent = async (libraryId: string, studentData: StudentDataInpu
   };
   
   const studentToSave: Student = {
-    ...newStudentData,
+    ...newStudentPartialData,
     id: newStudentId,
-  } as Student;
+    libraryId: currentLibraryId,
+    libraryName: (await getLibraryById(currentLibraryId))?.name
+  };
 
   const updates: Record<string, any> = {};
   updates[`libraries/${currentLibraryId}/students/${newStudentId}`] = studentToSave;
@@ -239,7 +245,7 @@ export const addStudent = async (libraryId: string, studentData: StudentDataInpu
   }
 
   if (amountPaidNow > 0) {
-    const paymentRecord: Omit<FeePayment, 'id' | 'studentName'> = {
+    const paymentRecord: Omit<FeePayment, 'id' | 'studentName' | 'libraryId' | 'libraryName'> = {
       studentId: newStudentId,
       amount: amountPaidNow,
       paymentDate: new Date().toISOString().split('T')[0],
@@ -253,7 +259,7 @@ export const addStudent = async (libraryId: string, studentData: StudentDataInpu
 };
 
 export const updateStudent = async (libraryId: string, studentId: string, updatesIn: StudentDataInput): Promise<Student | undefined> => {
-  const currentLibraryId = ensureSingleLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId, "updateStudent");
   const studentRef = ref(db, `libraries/${currentLibraryId}/students/${studentId}`);
   const studentSnapshot = await get(studentRef);
   if (!studentSnapshot.exists()) return undefined;
@@ -274,7 +280,8 @@ export const updateStudent = async (libraryId: string, studentId: string, update
     else finalIdProofUrl = undefined;
   }
 
-  const { photo, idProof, amountPaidNow, feesDue: currentFeesDueFromForm } = updatesIn;
+  const { photo, idProof, amountPaidNow } = updatesIn;
+  const currentFeesDueFromForm = updatesIn.feesDue // This is originalStudentData.feesDue passed from form
   
   let paymentTypeChargeDelta = 0;
   const newPaymentTypeId = updatesIn.paymentTypeId === '__NONE__' ? undefined : updatesIn.paymentTypeId;
@@ -283,10 +290,8 @@ export const updateStudent = async (libraryId: string, studentId: string, update
     const pt = await getPaymentTypeById(currentLibraryId, newPaymentTypeId);
     if (pt) paymentTypeChargeDelta = pt.amount; 
   } else if (!newPaymentTypeId && originalStudentData.paymentTypeId) {
-    // If payment type is removed, we might need to consider if a refund/adjustment is implied
-    // For now, this doesn't add a negative charge. It just means no *new* plan charge.
+     // If plan removed, no new charge. Consider if existing plan charge needs reversal - currently not handled.
   }
-
 
   const currentBalance = currentFeesDueFromForm ?? originalStudentData.feesDue; 
   const netBalance = currentBalance + paymentTypeChargeDelta - amountPaidNow;
@@ -310,8 +315,10 @@ export const updateStudent = async (libraryId: string, studentId: string, update
     idProofUrl: finalIdProofUrl,
     feesDue: netBalance,
     lastPaymentDate: amountPaidNow > 0 ? new Date().toISOString().split('T')[0] : originalStudentData.lastPaymentDate,
-    paymentTypeId: newPaymentTypeId, // This allows clearing the paymentTypeId
+    paymentTypeId: newPaymentTypeId,
     seatId: updatesIn.seatId === '__NONE__' ? undefined : (updatesIn.seatId ?? originalStudentData.seatId),
+    libraryId: currentLibraryId,
+    libraryName: originalStudentData.libraryName || (await getLibraryById(currentLibraryId))?.name,
   };
 
   const dbUpdates: Record<string, any> = {};
@@ -336,23 +343,20 @@ export const updateStudent = async (libraryId: string, studentId: string, update
         dbUpdates[`libraries/${currentLibraryId}/seats/${newSeatIdForUpdate}/isOccupied`] = true;
         dbUpdates[`libraries/${currentLibraryId}/seats/${newSeatIdForUpdate}/studentId`] = studentId;
         dbUpdates[`libraries/${currentLibraryId}/seats/${newSeatIdForUpdate}/studentName`] = updatedStudentData.fullName;
-        // updatedStudentData.seatId = newSeatIdForUpdate; // No need to re-assign, already done above
-        // dbUpdates[`libraries/${currentLibraryId}/students/${studentId}/seatId`] = newSeatIdForUpdate; // Already part of updatedStudentData
       } else {
-         updatedStudentData.seatId = undefined; // Ensure it's undefined if seat doesn't exist
+         updatedStudentData.seatId = undefined;
          dbUpdates[`libraries/${currentLibraryId}/students/${studentId}/seatId`] = null; 
       }
     } else {
-        updatedStudentData.seatId = undefined; // Ensure it's undefined if no seat
+        updatedStudentData.seatId = undefined;
         dbUpdates[`libraries/${currentLibraryId}/students/${studentId}/seatId`] = null; 
     }
   } else if (newSeatIdForUpdate && updatesIn.fullName !== originalStudentData.fullName) { 
-    // If seat is the same, but student name changed, update seat's studentName
     dbUpdates[`libraries/${currentLibraryId}/seats/${newSeatIdForUpdate}/studentName`] = updatedStudentData.fullName;
   }
   
   if (amountPaidNow > 0) {
-     const paymentRecord: Omit<FeePayment, 'id' | 'studentName'> = {
+     const paymentRecord: Omit<FeePayment, 'id' | 'studentName' | 'libraryId' | 'libraryName'> = {
       studentId: studentId,
       amount: amountPaidNow,
       paymentDate: new Date().toISOString().split('T')[0],
@@ -375,9 +379,7 @@ export const getSeats = async (libraryId: string | null): Promise<Seat[]> => {
       const seatsRef = ref(db, `libraries/${libMeta.id}/seats`);
       const snapshot = await get(seatsRef);
       if (snapshot.exists()) {
-        snapshot.forEach(childSnapshot => {
-          combinedSeats.push({ id: childSnapshot.key, ...childSnapshot.val(), libraryName: libMeta.name } as Seat); 
-        });
+        combinedSeats.push(...snapshotToAray<Seat>(snapshot, libMeta.id, libMeta.name));
       }
     }
     combinedSeats.sort((a, b) => {
@@ -397,7 +399,7 @@ export const getSeats = async (libraryId: string | null): Promise<Seat[]> => {
     const seatsRef = ref(db, `libraries/${libraryId}/seats`);
     const snapshot = await get(seatsRef);
     if (snapshot.exists()) {
-      const seatsArray = snapshotToAray<Seat>(snapshot);
+      const seatsArray = snapshotToAray<Seat>(snapshot, libraryId, (await getLibraryById(libraryId))?.name);
       seatsArray.sort((a, b) => {
           if (a.floor < b.floor) return -1;
           if (a.floor > b.floor) return 1;
@@ -415,17 +417,17 @@ export const getSeats = async (libraryId: string | null): Promise<Seat[]> => {
 };
 
 export const getSeatById = async (libraryId: string, seatId: string): Promise<Seat | undefined> => {
-  const currentLibraryId = ensureSingleLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId, "getSeatById");
   const seatRef = ref(db, `libraries/${currentLibraryId}/seats/${seatId}`);
   const snapshot = await get(seatRef);
   if (snapshot.exists()) {
-    return { id: snapshot.key, ...snapshot.val() } as Seat;
+    return { id: snapshot.key, ...snapshot.val(), libraryId: currentLibraryId, libraryName: (await getLibraryById(currentLibraryId))?.name } as Seat;
   }
   return undefined;
 };
 
 export const addSeat = async (libraryId: string, seatData: { seatNumber: string; floor: string }): Promise<Seat> => {
-  const currentLibraryId = ensureSingleLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId, "addSeat");
   const seatsQuery = query(ref(db, `libraries/${currentLibraryId}/seats`), orderByChild('floor'), equalTo(seatData.floor));
   const snapshot = await get(seatsQuery);
   if (snapshot.exists()) {
@@ -444,18 +446,23 @@ export const addSeat = async (libraryId: string, seatData: { seatNumber: string;
   const newSeatId = newSeatRef.key;
   if (!newSeatId) throw new Error("Failed to generate seat ID.");
 
-  const newSeat: Seat = {
-    id: newSeatId,
+  const newSeatPartial: Omit<Seat, 'id'|'libraryId'|'libraryName'> = {
     seatNumber: seatData.seatNumber,
     floor: seatData.floor,
     isOccupied: false,
   };
-  await set(newSeatRef, newSeat);
-  return newSeat;
+  const finalNewSeat: Seat = {
+    ...newSeatPartial,
+    id: newSeatId,
+    libraryId: currentLibraryId,
+    libraryName: (await getLibraryById(currentLibraryId))?.name,
+  }
+  await set(newSeatRef, finalNewSeat);
+  return finalNewSeat;
 };
 
 export const updateSeatDetails = async (libraryId: string, seatId: string, updates: { seatNumber?: string; floor?: string }): Promise<Seat | undefined> => {
-  const currentLibraryId = ensureSingleLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId, "updateSeatDetails");
   const seatRef = ref(db, `libraries/${currentLibraryId}/seats/${seatId}`);
   const seatSnapshot = await get(seatRef);
   if (!seatSnapshot.exists()) return undefined;
@@ -480,14 +487,15 @@ export const updateSeatDetails = async (libraryId: string, seatId: string, updat
     }
   }
 
-  const finalUpdates = { ...currentSeat, ...updates }; 
   const seatToSave: Seat = {
       id: currentSeat.id,
-      seatNumber: finalUpdates.seatNumber,
-      floor: finalUpdates.floor,
+      seatNumber: newSeatNumber,
+      floor: newFloor,
       isOccupied: currentSeat.isOccupied,
       studentId: currentSeat.studentId,
       studentName: currentSeat.studentName,
+      libraryId: currentLibraryId,
+      libraryName: currentSeat.libraryName || (await getLibraryById(currentLibraryId))?.name,
   };
 
   await set(seatRef, seatToSave);
@@ -495,7 +503,7 @@ export const updateSeatDetails = async (libraryId: string, seatId: string, updat
 };
 
 export const deleteSeat = async (libraryId: string, seatId: string): Promise<boolean> => {
-  const currentLibraryId = ensureSingleLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId, "deleteSeat");
   const seatRef = ref(db, `libraries/${currentLibraryId}/seats/${seatId}`);
   const seatSnapshot = await get(seatRef);
   if (!seatSnapshot.exists()) return false;
@@ -512,7 +520,7 @@ export const deleteSeat = async (libraryId: string, seatId: string): Promise<boo
 };
 
 export const assignSeat = async (libraryId: string, studentId: string, newSeatId: string): Promise<boolean> => {
-  const currentLibraryId = ensureSingleLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId, "assignSeat");
   const studentRef = ref(db, `libraries/${currentLibraryId}/students/${studentId}`);
   const newSeatRef = ref(db, `libraries/${currentLibraryId}/seats/${newSeatId}`);
 
@@ -545,7 +553,7 @@ export const assignSeat = async (libraryId: string, studentId: string, newSeatId
 };
 
 export const unassignSeat = async (libraryId: string, seatId: string): Promise<boolean> => {
-  const currentLibraryId = ensureSingleLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId, "unassignSeat");
   const seatRef = ref(db, `libraries/${currentLibraryId}/seats/${seatId}`);
   const seatSnapshot = await get(seatRef);
   if (!seatSnapshot.exists()) return false;
@@ -573,9 +581,7 @@ export const getPaymentTypes = async (libraryId: string | null): Promise<Payment
       const paymentTypesRef = ref(db, `libraries/${libMeta.id}/paymentTypes`);
       const snapshot = await get(paymentTypesRef);
       if (snapshot.exists()) {
-        snapshot.forEach(childSnapshot => {
-          combinedPaymentTypes.push({ id: childSnapshot.key, ...childSnapshot.val(), libraryName: libMeta.name } as PaymentType); 
-        });
+        combinedPaymentTypes.push(...snapshotToAray<PaymentType>(snapshot, libMeta.id, libMeta.name));
       }
     }
     return combinedPaymentTypes;
@@ -583,40 +589,53 @@ export const getPaymentTypes = async (libraryId: string | null): Promise<Payment
     const paymentTypesRef = ref(db, `libraries/${libraryId}/paymentTypes`);
     const snapshot = await get(paymentTypesRef);
     if (snapshot.exists()) {
-      return snapshotToAray<PaymentType>(snapshot);
+      return snapshotToAray<PaymentType>(snapshot, libraryId, (await getLibraryById(libraryId))?.name);
     }
     return [];
   }
 }
 
 export const getPaymentTypeById = async (libraryId: string, paymentTypeId: string): Promise<PaymentType | undefined> => {
-  const currentLibraryId = ensureSingleLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId, "getPaymentTypeById");
   const ptRef = ref(db, `libraries/${currentLibraryId}/paymentTypes/${paymentTypeId}`);
   const snapshot = await get(ptRef);
   if (snapshot.exists()) {
-      return { id: snapshot.key, ...snapshot.val() } as PaymentType;
+      return { id: snapshot.key, ...snapshot.val(), libraryId: currentLibraryId, libraryName: (await getLibraryById(currentLibraryId))?.name } as PaymentType;
   }
   return undefined;
 };
 
-export const addPaymentType = async (libraryId: string, planData: Omit<PaymentType, 'id'>): Promise<PaymentType> => {
-  const currentLibraryId = ensureSingleLibraryId(libraryId);
+export const addPaymentType = async (libraryId: string, planData: Omit<PaymentType, 'id' | 'libraryId' | 'libraryName'>): Promise<PaymentType> => {
+  const currentLibraryId = ensureSingleLibraryId(libraryId, "addPaymentType");
   const newPaymentTypeRef = push(ref(db, `libraries/${currentLibraryId}/paymentTypes`));
   const newId = newPaymentTypeRef.key;
   if (!newId) throw new Error("Failed to generate payment type ID.");
-  const newPlan : PaymentType = {...planData, id: newId};
+  const newPlan : PaymentType = {
+    ...planData, 
+    id: newId,
+    libraryId: currentLibraryId,
+    libraryName: (await getLibraryById(currentLibraryId))?.name,
+  };
   await set(newPaymentTypeRef, newPlan);
   return newPlan;
 }
 
-export const updatePaymentType = async (libraryId: string, paymentTypeId: string, updates: Partial<PaymentType>): Promise<PaymentType | undefined> => {
-  const currentLibraryId = ensureSingleLibraryId(libraryId);
+export const updatePaymentType = async (libraryId: string, paymentTypeId: string, updates: Partial<Omit<PaymentType, 'id' | 'libraryId' | 'libraryName'>>): Promise<PaymentType | undefined> => {
+  const currentLibraryId = ensureSingleLibraryId(libraryId, "updatePaymentType");
   const ptRef = ref(db, `libraries/${currentLibraryId}/paymentTypes/${paymentTypeId}`);
   const snapshot = await get(ptRef);
   if (!snapshot.exists()) return undefined;
-  const updatedData = { ...snapshot.val(), ...updates, id: paymentTypeId }; 
+
+  const existingData = snapshot.val();
+  const updatedData: PaymentType = { 
+    ...existingData, 
+    ...updates, 
+    id: paymentTypeId,
+    libraryId: currentLibraryId,
+    libraryName: existingData.libraryName || (await getLibraryById(currentLibraryId))?.name
+  }; 
   await set(ptRef, updatedData);
-  return updatedData as PaymentType;
+  return updatedData;
 }
 
 // Fee Payment Operations
@@ -629,9 +648,7 @@ export const getPayments = async (libraryId: string | null): Promise<FeePayment[
       const paymentsRef = ref(db, `libraries/${libMeta.id}/payments`);
       const snapshot = await get(paymentsRef);
       if (snapshot.exists()) {
-         snapshot.forEach(childSnapshot => {
-          combinedPayments.push({ id: childSnapshot.key, ...childSnapshot.val(), libraryName: libMeta.name } as FeePayment);
-        });
+         combinedPayments.push(...snapshotToAray<FeePayment>(snapshot, libMeta.id, libMeta.name));
       }
     }
     return combinedPayments;
@@ -639,7 +656,7 @@ export const getPayments = async (libraryId: string | null): Promise<FeePayment[
     const paymentsRef = ref(db, `libraries/${libraryId}/payments`);
     const snapshot = await get(paymentsRef);
     if (snapshot.exists()) {
-      return snapshotToAray<FeePayment>(snapshot);
+      return snapshotToAray<FeePayment>(snapshot, libraryId, (await getLibraryById(libraryId))?.name);
     }
     return [];
   }
@@ -647,32 +664,36 @@ export const getPayments = async (libraryId: string | null): Promise<FeePayment[
 
 export const addPayment = async (
   libraryId: string, 
-  paymentData: Omit<FeePayment, 'id' | 'studentName'>,
-  studentFullName?: string, 
+  paymentData: Omit<FeePayment, 'id' | 'studentName' | 'libraryId' | 'libraryName'>,
+  studentFullNameInput?: string, 
   updateStudentBalance: boolean = true 
 ): Promise<FeePayment> => {
-  const currentLibraryId = ensureSingleLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId, "addPayment");
   
-  let finalStudentName = studentFullName;
-  if (!finalStudentName) {
-    const studentRefForName = ref(db, `libraries/${currentLibraryId}/students/${paymentData.studentId}`);
-    const studentSnapshotForName = await get(studentRefForName);
-    if (!studentSnapshotForName.exists()) throw new Error("Student not found for payment.");
-    finalStudentName = (studentSnapshotForName.val() as Student).fullName;
+  let studentFullName = studentFullNameInput;
+  if (!studentFullName) {
+    const student = await getStudentById(currentLibraryId, paymentData.studentId);
+    if (!student) throw new Error("Student not found for payment.");
+    studentFullName = student.fullName;
   }
 
   const newPaymentRef = push(ref(db, `libraries/${currentLibraryId}/payments`));
   const newPaymentId = newPaymentRef.key;
   if (!newPaymentId) throw new Error("Failed to generate payment ID.");
 
-  const newPayment: FeePayment = { ...paymentData, id: newPaymentId, studentName: finalStudentName };
+  const newPayment: FeePayment = { 
+      ...paymentData, 
+      id: newPaymentId, 
+      studentName: studentFullName,
+      libraryId: currentLibraryId,
+      libraryName: (await getLibraryById(currentLibraryId))?.name,
+    };
   
   const updates: Record<string, any> = {};
   updates[`libraries/${currentLibraryId}/payments/${newPaymentId}`] = newPayment;
   
   if (updateStudentBalance) {
-    const studentRef = ref(db, `libraries/${currentLibraryId}/students/${paymentData.studentId}`);
-    const studentSnapshot = await get(studentRef);
+    const studentSnapshot = await get(ref(db, `libraries/${currentLibraryId}/students/${paymentData.studentId}`));
     if (!studentSnapshot.exists()) throw new Error("Student not found to update balance.");
     const student = {id: studentSnapshot.key, ...studentSnapshot.val()} as Student;
     
@@ -689,7 +710,7 @@ export const addPayment = async (
 }
 
 export const markFeesAsPaid = async (libraryId: string, studentId: string): Promise<boolean> => {
-  const currentLibraryId = ensureSingleLibraryId(libraryId);
+  const currentLibraryId = ensureSingleLibraryId(libraryId, "markFeesAsPaid");
   const studentRef = ref(db, `libraries/${currentLibraryId}/students/${studentId}`);
   const studentSnapshot = await get(studentRef);
   if (!studentSnapshot.exists()) return false;

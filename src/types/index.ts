@@ -3,7 +3,7 @@ export interface Student {
   id: string;
   fullName: string;
   photoUrl?: string;
-  aadhaarNumber?: string; // Changed from contactDetails (email)
+  aadhaarNumber?: string; 
   mobileNumber?: string;
   address?: string;
   fatherName?: string;
@@ -16,6 +16,7 @@ export interface Student {
   enrollmentDate: string; 
   paymentTypeId?: string;
   libraryName?: string; 
+  libraryId?: string; // Added for context when fetching all students
 }
 
 export interface Seat {
@@ -26,6 +27,7 @@ export interface Seat {
   studentId?: string;
   studentName?: string;
   libraryName?: string; 
+  libraryId?: string; // Added for context when SA deals with seats from "All Libraries" view
 }
 
 export interface FeePayment {
@@ -36,6 +38,7 @@ export interface FeePayment {
   paymentDate: string;
   notes?: string;
   libraryName?: string; 
+  libraryId?: string; // Added for context
 }
 
 export interface PaymentType { 
@@ -44,6 +47,7 @@ export interface PaymentType {
   amount: number;
   frequency: 'monthly' | 'quarterly' | 'annually'; 
   libraryName?: string; 
+  libraryId?: string; // Added for context
 }
 
 export interface DashboardSummary {

@@ -14,16 +14,19 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
-import type { Seat } from "@/types";
+import type { Seat, LibraryMetadata } from "@/types";
 
-const seatFormSchema = z.object({
+const seatFormSchemaBase = z.object({
   seatNumber: z.string().min(1, { message: "Seat number is required." }).max(20, {message: "Seat number too long (max 20 chars)."}),
   floor: z.string().min(1, { message: "Floor is required." }).max(50, {message: "Floor name too long (max 50 chars)."}),
+  selectedLibraryId: z.string().optional(),
 });
 
-export type SeatFormValues = z.infer<typeof seatFormSchema>;
+// Conditional schema based on props, handled by form submission logic in parent or resolver
+export type SeatFormValues = z.infer<typeof seatFormSchemaBase>;
 
 interface SeatFormProps {
   initialData?: Pick<Seat, 'seatNumber' | 'floor'>;
@@ -31,15 +34,37 @@ interface SeatFormProps {
   isSubmitting: boolean;
   onCancel: () => void;
   dialogMode?: 'add' | 'edit';
-  renderHeader?: boolean; // New prop
+  renderHeader?: boolean;
+  allLibraries?: LibraryMetadata[];
+  isSuperAdminGlobalView?: boolean; // True if SA is in "All Libraries" view
 }
 
-export function SeatForm({ initialData, onSubmit, isSubmitting, onCancel, dialogMode = 'add', renderHeader = true }: SeatFormProps) {
+export function SeatForm({ 
+  initialData, 
+  onSubmit, 
+  isSubmitting, 
+  onCancel, 
+  dialogMode = 'add', 
+  renderHeader = true,
+  allLibraries = [],
+  isSuperAdminGlobalView = false,
+}: SeatFormProps) {
+
   const form = useForm<SeatFormValues>({
-    resolver: zodResolver(seatFormSchema),
-    defaultValues: initialData || {
+    resolver: zodResolver(
+      isSuperAdminGlobalView && dialogMode === 'add'
+        ? seatFormSchemaBase.extend({
+            selectedLibraryId: z.string().min(1, { message: "Library selection is required." }),
+          })
+        : seatFormSchemaBase
+    ),
+    defaultValues: initialData ? {
+      ...initialData,
+      selectedLibraryId: undefined, // Not used for edit mode directly here
+    } : {
       seatNumber: "",
       floor: "",
+      selectedLibraryId: undefined,
     },
   });
 
@@ -54,7 +79,33 @@ export function SeatForm({ initialData, onSubmit, isSubmitting, onCancel, dialog
       )}
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
-          <CardContent className="space-y-4 px-0 pt-2"> {/* Adjusted pt if header is hidden */}
+          <CardContent className="space-y-4 px-0 pt-2">
+            {isSuperAdminGlobalView && dialogMode === 'add' && (
+              <FormField
+                control={form.control}
+                name="selectedLibraryId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Target Library</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select library for this seat" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {allLibraries.map(lib => (
+                          <SelectItem key={lib.id} value={lib.id}>
+                            {lib.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             <FormField
               control={form.control}
               name="seatNumber"
