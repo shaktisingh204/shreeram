@@ -30,7 +30,9 @@
           ".indexOn": ["floor", "seatNumber"]
         },
         "paymentTypes": {},
-        "payments": {}
+        "payments": {
+          ".indexOn": "studentId"
+        }
       }
     },
     "config": { 
