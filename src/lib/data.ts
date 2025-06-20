@@ -20,10 +20,33 @@ const snapshotToAray = <T>(snapshot: any, libraryId?: string, libraryName?: stri
 
 // --- File Upload ---
 const uploadFile = async (file: File, path: string): Promise<string> => {
-    const fileStorageRef = storageRef(storage, path);
-    const snapshot = await uploadBytes(fileStorageRef, file);
-    const downloadURL = await getDownloadURL(snapshot.ref);
-    return downloadURL;
+    // IMPORTANT: Replace this with the actual URL to your PHP upload script
+    const uploadEndpoint = 'https://your-hosting-domain.com/upload.php';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch(uploadEndpoint, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success && result.url) {
+            return result.url;
+        } else {
+            throw new Error(result.error || 'Unknown error occurred during upload.');
+        }
+    } catch (error) {
+        console.error('Error uploading file to custom endpoint:', error);
+        throw new Error(`Failed to upload file. Please check the console for details.`);
+    }
 };
 
 // --- User Metadata Operations ---
