@@ -33,23 +33,6 @@
         "payments": {}
       }
     },
-    "storage": {
-      "$bucket": {
-        ".read": "auth != null",
-        ".write": "auth != null",
-        "libraries": {
-          "$libraryId": {
-            "students": {
-              "$studentId": {
-                "$fileName": {
-                  ".write": "request.resource.size < 5 * 1024 * 1024 && (request.resource.contentType.matches('image/.*') || request.resource.contentType.matches('application/pdf'))"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "config": { 
       "adminPassword": {
         ".read": "auth != null && root.child('users_metadata').child(auth.uid).child('role').val() === 'superadmin'",

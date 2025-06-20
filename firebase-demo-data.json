@@ -5,9 +5,18 @@
       "id": "YOUR_ADMIN_FIREBASE_UID_HERE",
       "email": "shakti@gmail.com",
       "displayName": "Shakti (Super Admin)",
-      "role": "superadmin",
-      "assignedLibraryId": "library_main",
-      "assignedLibraryName": "Main Library (Default)"
+      "role": "superadmin"
+    },
+    "YOUR_MANAGER_FIREBASE_UID_HERE": {
+      "id": "YOUR_MANAGER_FIREBASE_UID_HERE",
+      "email": "manager@example.com",
+      "displayName": "Raj (Manager)",
+      "role": "manager",
+      "mobileNumber": "9876543210",
+      "assignedLibraries": {
+        "library_main": "Main Library (Default)",
+        "library_branch_a": "Branch A - North Campus"
+      }
     }
   },
   "libraries_metadata": {
@@ -39,7 +48,7 @@
           "id": "student_001_main",
           "fullName": "Aarav Sharma (Main)",
           "photoUrl": "https://placehold.co/100x100.png?text=AS",
-          "contactDetails": "aarav.sharma.main@example.com",
+          "aadhaarNumber": "123456789012",
           "mobileNumber": "9876543210",
           "fatherName": "Rajesh Sharma",
           "address": "123 Park Avenue, New Delhi, Delhi 110001",
@@ -56,7 +65,7 @@
           "id": "student_002_main",
           "fullName": "Priya Singh (Main)",
           "photoUrl": "https://placehold.co/100x100.png?text=PS",
-          "contactDetails": "priya.singh.main@example.com",
+          "aadhaarNumber": "210987654321",
           "mobileNumber": "9988776655",
           "fatherName": "Anil Singh",
           "address": "45 MG Road, Bangalore, Karnataka 560001",
@@ -127,7 +136,7 @@
           "id": "student_001_branch_a",
           "fullName": "Rohan Mehta (Branch A)",
           "photoUrl": "https://placehold.co/100x100.png?text=RM",
-          "contactDetails": "rohan.mehta.brancha@example.com",
+          "aadhaarNumber": "334455667788",
           "mobileNumber": "9123456780",
           "fatherName": "Vikas Mehta",
           "address": "789 Ocean Drive, Mumbai, Maharashtra 400001",
