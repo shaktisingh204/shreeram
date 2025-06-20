@@ -21,7 +21,7 @@ const snapshotToAray = <T>(snapshot: any, libraryId?: string, libraryName?: stri
 // --- File Upload ---
 const uploadFile = async (file: File, path: string): Promise<string> => {
     // IMPORTANT: Replace this with the actual URL to your PHP upload script
-    const uploadEndpoint = 'https://your-hosting-domain.com/upload.php';
+    const uploadEndpoint = 'https://images.shreerameducation.com/upload.php';
 
     const formData = new FormData();
     formData.append('file', file);
