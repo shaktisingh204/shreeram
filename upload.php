@@ -1,3 +1,4 @@
+
 <?php
 header("Access-Control-Allow-Origin: *"); // For production, restrict this to your app's domain, e.g., https://your-app.web.app
 header("Access-Control-Allow-Methods: POST, OPTIONS");
@@ -26,10 +27,9 @@ if (isset($_FILES['file'])) {
         $targetPath = $uploadDir . $fileName;
 
         if (move_uploaded_file($file['tmp_name'], $targetPath)) {
-            // IMPORTANT: Replace 'https://your-hosting-domain.com/' with the actual URL to your hosting.
-            // This URL must be publicly accessible.
-            $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
-            $domainName = $_SERVER['HTTP_HOST'];
+            // IMPORTANT: The domain name is hardcoded here as requested.
+            $protocol = "https://";
+            $domainName = "images.shreerameducation.com";
             $fileUrl = $protocol . $domainName . '/' . $targetPath;
             
             $response['success'] = true;

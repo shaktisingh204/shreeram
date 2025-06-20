@@ -7,13 +7,21 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/AuthContext";
+import { BrandingSettingsForm } from "./BrandingSettingsForm";
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
 
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-headline font-bold text-primary">Settings</h1>
+
+      {isSuperAdmin && (
+        <>
+          <BrandingSettingsForm />
+          <Separator />
+        </>
+      )}
 
       <Card className="shadow-lg">
         <CardHeader>

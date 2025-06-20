@@ -35,9 +35,13 @@
         }
       }
     },
-    "config": { 
+    "config": {
       "adminPassword": {
         ".read": "auth != null && root.child('users_metadata').child(auth.uid).child('role').val() === 'superadmin'",
+        ".write": "auth != null && root.child('users_metadata').child(auth.uid).child('role').val() === 'superadmin'"
+      },
+      "branding": {
+        ".read": "auth != null",
         ".write": "auth != null && root.child('users_metadata').child(auth.uid).child('role').val() === 'superadmin'"
       }
     }

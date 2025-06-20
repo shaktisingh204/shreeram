@@ -2,6 +2,7 @@
 "use client";
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   Sidebar,
@@ -25,7 +26,7 @@ import {
   BookOpenCheck,
   Library,
   UsersRound, 
-  DatabaseZap, // For Admin Utilities -> Export Data
+  DatabaseZap,
 } from 'lucide-react';
 
 const navItemsBase = [
@@ -49,19 +50,32 @@ const managerNavItems = navItemsBase;
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { logout, isSuperAdmin, isManager } = useAuth();
+  const { logout, isSuperAdmin, isManager, brandingConfig } = useAuth();
 
   const navItems = isSuperAdmin ? superAdminNavItems : (isManager ? managerNavItems : []);
-
 
   return (
     <Sidebar collapsible="icon" variant="sidebar" side="left">
       <SidebarHeader className="flex items-center justify-center p-4 border-b border-sidebar-border">
-        <Link href="/dashboard" className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
-            <BookOpenCheck className="h-8 w-8 text-sidebar-primary group-data-[collapsible=icon]:h-7 group-data-[collapsible=icon]:w-7" />
-          <h1 className="text-xl font-headline font-bold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
-            Shree Ram Education
-          </h1>
+        <Link href="/dashboard" className="flex items-center justify-center gap-2 group-data-[collapsible=icon]:justify-center">
+            {brandingConfig?.logoUrl ? (
+               <Image
+                    src={brandingConfig.logoUrl}
+                    alt="App Logo"
+                    width={brandingConfig.logoWidth}
+                    height={brandingConfig.logoHeight}
+                    style={{
+                        width: `${brandingConfig.logoWidth}px`,
+                        height: `${brandingConfig.logoHeight}px`
+                    }}
+                    className="object-contain group-data-[collapsible=icon]:hidden"
+                />
+            ) : (
+                <BookOpenCheck className="h-8 w-8 text-sidebar-primary group-data-[collapsible=icon]:h-7 group-data-[collapsible=icon]:w-7" />
+            )}
+            <h1 className="text-xl font-headline font-bold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
+                {!brandingConfig?.logoUrl && "Shree Ram Education"}
+            </h1>
         </Link>
       </SidebarHeader>
       <SidebarContent className="flex-1 overflow-y-auto">

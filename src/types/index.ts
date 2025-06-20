@@ -73,3 +73,9 @@ export interface UserMetadata {
   mobileNumber?: string;
   assignedLibraries?: { [id: string]: string }; // Maps library ID to library name
 }
+
+export interface BrandingConfig {
+  logoUrl: string;
+  logoWidth: number;
+  logoHeight: number;
+}

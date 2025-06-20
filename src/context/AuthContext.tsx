@@ -11,13 +11,14 @@ import {
   onAuthStateChanged,
   type User
 } from 'firebase/auth';
-import { getUserMetadata, getLibrariesMetadata } from '@/lib/data';
-import type { UserMetadata, LibraryMetadata } from '@/types';
+import { getUserMetadata, getLibrariesMetadata, getBrandingConfig } from '@/lib/data';
+import type { UserMetadata, LibraryMetadata, BrandingConfig } from '@/types';
 
 interface AuthContextType {
   isAuthenticated: boolean;
   user: User | null;
   userMetadata: UserMetadata | null;
+  brandingConfig: BrandingConfig | null;
   login: (email: string, password_input: string) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
@@ -37,6 +38,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userMetadata, setUserMetadata] = useState<UserMetadata | null>(null);
+  const [brandingConfig, setBrandingConfig] = useState<BrandingConfig | null>(null);
   const [currentLibraryId, setCurrentLibraryId] = useState<string | null>(null);
   const [currentLibraryName, setCurrentLibraryName] = useState<string | null>(null);
   const [allLibraries, setAllLibraries] = useState<LibraryMetadata[]>([]);
@@ -68,12 +70,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     if (currentUserToProcess) {
         try {
-            const metadata = await getUserMetadata(currentUserToProcess.uid);
+            const [metadata, allSystemLibs, branding] = await Promise.all([
+                getUserMetadata(currentUserToProcess.uid),
+                getLibrariesMetadata(),
+                getBrandingConfig()
+            ]);
+            
             setUserMetadata(metadata);
+            setBrandingConfig(branding);
             
             let libsForContext: LibraryMetadata[] = [];
             let newContextToSet: string | null = null;
-            const allSystemLibs = await getLibrariesMetadata();
             
             if (_isSuperAdmin(metadata)) {
                 libsForContext = allSystemLibs;
@@ -108,6 +115,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     } else {
         setUserMetadata(null); setCurrentLibraryId(null); setCurrentLibraryName(null); setAllLibraries([]);
+        setBrandingConfig(null);
         setIsImpersonating(false);
     }
   }, [user, currentLibraryId, isImpersonating, _isSuperAdmin, _isManager, fetchAndSetLibraryName]);
@@ -125,6 +133,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       } else {
         setUserMetadata(null); setCurrentLibraryId(null); setCurrentLibraryName(null); setAllLibraries([]);
+        setBrandingConfig(null);
         setIsImpersonating(false);
         if (pathname !== '/login') {
           router.push('/login');
@@ -202,6 +211,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isAuthenticated,
         user,
         userMetadata,
+        brandingConfig,
         login,
         logout,
         loading,

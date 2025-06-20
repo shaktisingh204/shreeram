@@ -2,7 +2,7 @@
 import { db, storage } from './firebase';
 import { ref, get, set, push, child, update, remove, query, orderByChild, equalTo } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import type { Student, Seat, PaymentType, FeePayment, DashboardSummary, LibraryMetadata, UserMetadata } from '@/types';
+import type { Student, Seat, PaymentType, FeePayment, DashboardSummary, LibraryMetadata, UserMetadata, BrandingConfig } from '@/types';
 
 // Helper function to convert Firebase snapshot to array
 const snapshotToAray = <T>(snapshot: any, libraryId?: string, libraryName?: string): T[] => {
@@ -47,6 +47,34 @@ const uploadFile = async (file: File, path: string): Promise<string> => {
         throw new Error(`Failed to upload file. Please check the console for details.`);
     }
 };
+
+// --- Config Operations ---
+export const getBrandingConfig = async (): Promise<BrandingConfig | null> => {
+    const brandingRef = ref(db, 'config/branding');
+    const snapshot = await get(brandingRef);
+    if (snapshot.exists()) {
+        return snapshot.val() as BrandingConfig;
+    }
+    return null;
+};
+
+export const setBrandingConfig = async (config: { logo?: File | string, width: number, height: number }): Promise<void> => {
+    let finalLogoUrl = '';
+    if (config.logo instanceof File) {
+        finalLogoUrl = await uploadFile(config.logo, 'branding/logo');
+    } else if (typeof config.logo === 'string') {
+        finalLogoUrl = config.logo;
+    }
+
+    const brandingData: BrandingConfig = {
+        logoUrl: finalLogoUrl,
+        logoWidth: config.width,
+        logoHeight: config.height,
+    };
+
+    await set(ref(db, 'config/branding'), brandingData);
+};
+
 
 // --- User Metadata Operations ---
 export const getUserMetadata = async (userId: string): Promise<UserMetadata | null> => {
