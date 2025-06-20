@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { getStudents, getSeats } from '@/lib/data'; 
+import { getStudents, getSeats, deleteStudent } from '@/lib/data'; 
 import type { Student, Seat } from '@/types'; 
 import { PlusCircle, Search, Edit, Eye, Trash2, Loader2, MoreHorizontal, AlertTriangle, Users, Library } from 'lucide-react';
 import {
@@ -17,6 +17,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -39,34 +49,37 @@ export default function StudentsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [loadingData, setLoadingData] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (authLoading) {
-        setLoadingData(true);
-        return;
-      }
-      if (isSuperAdmin || currentLibraryId) {
-        setLoadingData(true);
-        try {
-          const studentData = await getStudents(currentLibraryId); 
-          const seatData = await getSeats(currentLibraryId); 
-          setStudents(studentData);
-          setSeats(seatData); 
-        } catch (error) {
-          console.error("Failed to fetch students or seats:", error);
-          toast({ title: "Error", description: `Failed to fetch data for ${currentLibraryName || 'libraries'}.`, variant: "destructive" });
-          setStudents([]);
-          setSeats([]);
-        } finally {
-          setLoadingData(false);
-        }
-      } else { 
-        setLoadingData(false);
+  const fetchData = async () => {
+    if (authLoading) {
+      setLoadingData(true);
+      return;
+    }
+    if (isSuperAdmin || currentLibraryId) {
+      setLoadingData(true);
+      try {
+        const studentData = await getStudents(currentLibraryId); 
+        const seatData = await getSeats(currentLibraryId); 
+        setStudents(studentData);
+        setSeats(seatData); 
+      } catch (error) {
+        console.error("Failed to fetch students or seats:", error);
+        toast({ title: "Error", description: `Failed to fetch data for ${currentLibraryName || 'libraries'}.`, variant: "destructive" });
         setStudents([]);
         setSeats([]);
+      } finally {
+        setLoadingData(false);
       }
-    };
+    } else { 
+      setLoadingData(false);
+      setStudents([]);
+      setSeats([]);
+    }
+  };
+
+  useEffect(() => {
     fetchData();
   }, [currentLibraryId, authLoading, isSuperAdmin, currentLibraryName, toast]);
 
@@ -84,6 +97,24 @@ export default function StudentsPage() {
       return nameMatch && statusMatch;
     });
   }, [students, searchTerm, statusFilter]);
+
+  const handleDelete = async () => {
+    if (!studentToDelete || !studentToDelete.libraryId) {
+        toast({ title: "Error", description: "Student information is incomplete for deletion.", variant: "destructive" });
+        return;
+    }
+    setIsDeleting(true);
+    try {
+        await deleteStudent(studentToDelete.libraryId, studentToDelete.id);
+        toast({ title: "Success", description: `Student ${studentToDelete.fullName} has been deleted.` });
+        setStudentToDelete(null);
+        await fetchData();
+    } catch (error) {
+        toast({ title: "Error", description: (error as Error).message, variant: "destructive" });
+    } finally {
+        setIsDeleting(false);
+    }
+  };
 
   const getStatusBadgeVariant = (status: Student['status'], feesDue: number) => {
     if (status === 'inactive') return 'secondary';
@@ -139,7 +170,7 @@ export default function StudentsPage() {
         <div>
             <h1 className="text-3xl font-headline font-bold text-primary">{pageTitle}</h1>
             {currentLibraryName && <p className="text-md text-muted-foreground flex items-center"><Library className="h-4 w-4 mr-2 text-accent" />Managing for: <span className="font-semibold ml-1">{currentLibraryName}</span></p>}
-            {isSuperAdmin && !currentLibraryId && <p className="text-md text-muted-foreground">Displaying students from all libraries. Select a library via "View As Manager" to manage or add students.</p>}
+            {isSuperAdmin && !currentLibraryId && <p className="text-md text-muted-foreground">Displaying students from all libraries. Select a library from the header to manage or add students.</p>}
         </div>
         <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
           <div className="relative w-full sm:w-auto">
@@ -236,7 +267,7 @@ export default function StudentsPage() {
                             <Edit className="mr-2 h-4 w-4" /> Edit
                           </Link>
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive flex items-center" onClick={() => alert(`Delete student ${student.fullName}? (Not implemented)`)}>
+                        <DropdownMenuItem className="text-destructive flex items-center" onClick={() => setStudentToDelete(student)}>
                           <Trash2 className="mr-2 h-4 w-4" /> Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -267,6 +298,29 @@ export default function StudentsPage() {
           )}
         </div>
       )}
+       <AlertDialog open={!!studentToDelete} onOpenChange={(open) => !open && setStudentToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the student 
+              <span className="font-bold"> {studentToDelete?.fullName} </span> 
+              and all of their associated payment history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setStudentToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete Student
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
     </TooltipProvider>
   );

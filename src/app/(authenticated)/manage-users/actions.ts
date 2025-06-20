@@ -3,7 +3,6 @@
 
 import * as admin from 'firebase-admin';
 import { z } from 'zod';
-import { getLibrariesMetadata } from '@/lib/data'; 
 import type { UserMetadata } from '@/types';
 
 // Function to initialize Firebase Admin SDK if not already initialized
@@ -51,7 +50,7 @@ const CreateManagerSchema = z.object({
     message: "Mobile number must be 10 digits if provided.",
   }),
   role: z.literal("manager"), 
-  assignedLibraryId: z.string().min(1, {message: "A library must be assigned."}),
+  assignedLibraries: z.record(z.string()).optional(),
 });
 
 export type CreateManagerFormValues = z.infer<typeof CreateManagerSchema>;
@@ -75,7 +74,7 @@ export async function createManagerAction(values: CreateManagerFormValues): Prom
     return { success: false, message: errorMessage };
   }
 
-  const { email, password, displayName, mobileNumber, assignedLibraryId, role } = validation.data;
+  const { email, password, displayName, mobileNumber, assignedLibraries, role } = validation.data;
 
   try {
     // At this point, admin SDK should be initialized.
@@ -89,21 +88,13 @@ export async function createManagerAction(values: CreateManagerFormValues): Prom
     const uid = userRecord.uid;
     console.log(`createManagerAction: User created successfully in Firebase Auth. UID: ${uid}`);
     
-    console.log(`createManagerAction: Fetching library metadata for assignedLibraryId: ${assignedLibraryId}`);
-    const libraries = await getLibrariesMetadata();
-    
-    const library = libraries.find(lib => lib.id === assignedLibraryId);
-    const libraryName = library?.name || "Unknown Library"; // Default if library not found
-    console.log(`createManagerAction: Library found: ${libraryName} (ID: ${assignedLibraryId})`);
-
     const userMetadata: UserMetadata = {
       id: uid,
       email,
       displayName,
       mobileNumber: mobileNumber || undefined,
       role,
-      assignedLibraryId,
-      assignedLibraryName: libraryName,
+      assignedLibraries: assignedLibraries || {},
     };
     console.log(`createManagerAction: Attempting to set user metadata in RTDB for UID ${uid}:`, JSON.stringify(userMetadata, null, 2));
 

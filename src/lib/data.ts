@@ -1,6 +1,7 @@
 
-import { db } from './firebase';
+import { db, storage } from './firebase';
 import { ref, get, set, push, child, update, remove, query, orderByChild, equalTo } from 'firebase/database';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { Student, Seat, PaymentType, FeePayment, DashboardSummary, LibraryMetadata, UserMetadata } from '@/types';
 
 // Helper function to convert Firebase snapshot to array
@@ -15,6 +16,14 @@ const snapshotToAray = <T>(snapshot: any, libraryId?: string, libraryName?: stri
     items.push(itemData as T);
   });
   return items;
+};
+
+// --- File Upload ---
+const uploadFile = async (file: File, path: string): Promise<string> => {
+    const fileStorageRef = storageRef(storage, path);
+    const snapshot = await uploadBytes(fileStorageRef, file);
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    return downloadURL;
 };
 
 // --- User Metadata Operations ---
@@ -93,9 +102,8 @@ export const deleteLibrary = async (libraryIdToDelete: string): Promise<void> =>
 
   const allUsers = await getUsersMetadata();
   allUsers.forEach(user => {
-    if (user.role === 'manager' && user.assignedLibraryId === libraryIdToDelete) {
-      updates[`users_metadata/${user.id}/assignedLibraryId`] = null;
-      updates[`users_metadata/${user.id}/assignedLibraryName`] = null;
+    if (user.role === 'manager' && user.assignedLibraries && user.assignedLibraries[libraryIdToDelete]) {
+      updates[`users_metadata/${user.id}/assignedLibraries/${libraryIdToDelete}`] = null;
     }
   });
 
@@ -110,6 +118,38 @@ const ensureSingleLibraryId = (libraryId: string | null, operation?: string): st
     throw new Error(`A specific library context is required for this operation: ${operation}.`);
   }
   return libraryId;
+};
+
+const calculateRetroactiveCharges = (enrollmentDateStr: string, paymentType: PaymentType): number => {
+    const enrollmentDate = new Date(enrollmentDateStr);
+    const now = new Date();
+    enrollmentDate.setHours(0,0,0,0);
+    now.setHours(0,0,0,0);
+
+    if (isNaN(enrollmentDate.getTime()) || enrollmentDate > now) return 0;
+    
+    let months = (now.getFullYear() - enrollmentDate.getFullYear()) * 12;
+    months -= enrollmentDate.getMonth();
+    months += now.getMonth();
+    
+    if (months < 0) return 0;
+
+    let cycles = 0;
+    switch(paymentType.frequency) {
+        case 'monthly':
+            cycles = months;
+            break;
+        case 'quarterly':
+            cycles = Math.floor(months / 3);
+            break;
+        case 'annually':
+            cycles = Math.floor(months / 12);
+            break;
+    }
+    
+    const numBillingPeriods = cycles + 1;
+    
+    return numBillingPeriods * paymentType.amount;
 };
 
 // Student Operations
@@ -165,34 +205,33 @@ interface StudentDataInput {
 
 export const addStudent = async (libraryId: string, studentData: StudentDataInput): Promise<Student> => {
   const currentLibraryId = ensureSingleLibraryId(libraryId, "addStudent");
-  let finalPhotoUrl: string | undefined = undefined;
-  if (typeof studentData.photo === 'string' && studentData.photo) {
-    finalPhotoUrl = studentData.photo;
-  } else if (studentData.photo instanceof File) {
-    finalPhotoUrl = `https://placehold.co/100x100.png?text=${encodeURIComponent(studentData.photo.name.substring(0,10) || 'Photo')}`;
-  }
-
-  let finalIdProofUrl: string | undefined = undefined;
-  if (typeof studentData.idProof === 'string' && studentData.idProof) {
-    finalIdProofUrl = studentData.idProof;
-  } else if (studentData.idProof instanceof File) {
-    finalIdProofUrl = `https://placehold.co/200x150.png?text=${encodeURIComponent(studentData.idProof.name.substring(0,10) || 'ID')}_ID`;
-  }
-  
-  const { photo, idProof, amountPaidNow } = studentData;
   
   const newStudentRef = push(ref(db, `libraries/${currentLibraryId}/students`));
   const newStudentId = newStudentRef.key;
   if (!newStudentId) throw new Error("Failed to generate student ID.");
 
-  let paymentTypeCharge = 0;
+  let finalPhotoUrl: string | undefined = undefined;
+  if (studentData.photo instanceof File) {
+    finalPhotoUrl = await uploadFile(studentData.photo, `libraries/${currentLibraryId}/students/${newStudentId}/photo`);
+  }
+
+  let finalIdProofUrl: string | undefined = undefined;
+  if (studentData.idProof instanceof File) {
+    finalIdProofUrl = await uploadFile(studentData.idProof, `libraries/${currentLibraryId}/students/${newStudentId}/id_proof`);
+  }
+  
+  const { photo, idProof, amountPaidNow, enrollmentDate } = studentData;
+  
+  let totalCharge = 0;
   const studentPaymentTypeId = studentData.paymentTypeId === '__NONE__' ? undefined : studentData.paymentTypeId;
   if (studentPaymentTypeId) {
     const pt = await getPaymentTypeById(currentLibraryId, studentPaymentTypeId);
-    if (pt) paymentTypeCharge = pt.amount;
+    if (pt) {
+        totalCharge = calculateRetroactiveCharges(enrollmentDate, pt);
+    }
   }
 
-  const netBalance = paymentTypeCharge - amountPaidNow;
+  const netBalance = totalCharge - amountPaidNow;
   let finalStatus = studentData.status;
   if (studentData.status !== 'inactive') {
     finalStatus = netBalance > 0 ? 'owing' : 'enrolled';
@@ -206,7 +245,7 @@ export const addStudent = async (libraryId: string, studentData: StudentDataInpu
     address: studentData.address || undefined,
     notes: studentData.notes || undefined,
     seatId: studentData.seatId === '__NONE__' ? undefined : studentData.seatId,
-    enrollmentDate: studentData.enrollmentDate,
+    enrollmentDate: enrollmentDate,
     paymentTypeId: studentPaymentTypeId,
     photoUrl: finalPhotoUrl,
     idProofUrl: finalIdProofUrl,
@@ -249,7 +288,7 @@ export const addStudent = async (libraryId: string, studentData: StudentDataInpu
       studentId: newStudentId,
       amount: amountPaidNow,
       paymentDate: new Date().toISOString().split('T')[0],
-      notes: `Initial payment on enrollment. Plan charge: ${paymentTypeCharge}. Paid: ${amountPaidNow}.`,
+      notes: `Initial payment on enrollment. Plan charge: ${totalCharge}. Paid: ${amountPaidNow}.`,
     };
     await addPayment(currentLibraryId, paymentRecord, studentToSave.fullName, false);
   }
@@ -267,30 +306,32 @@ export const updateStudent = async (libraryId: string, studentId: string, update
   const originalStudentData = { id: studentId, ...studentSnapshot.val() } as Student;
   
   let finalPhotoUrl: string | undefined = originalStudentData.photoUrl;
-  if (updatesIn.hasOwnProperty('photo')) {
-    if (typeof updatesIn.photo === 'string') finalPhotoUrl = updatesIn.photo || undefined;
-    else if (updatesIn.photo instanceof File) finalPhotoUrl = `https://placehold.co/100x100.png?text=${encodeURIComponent(updatesIn.photo.name.substring(0,10) || 'Photo')}`;
-    else finalPhotoUrl = undefined;
+  if (updatesIn.photo instanceof File) {
+    finalPhotoUrl = await uploadFile(updatesIn.photo, `libraries/${currentLibraryId}/students/${studentId}/photo`);
+  } else if (typeof updatesIn.photo === 'string') {
+    finalPhotoUrl = updatesIn.photo || undefined;
   }
 
   let finalIdProofUrl: string | undefined = originalStudentData.idProofUrl;
-  if (updatesIn.hasOwnProperty('idProof')) {
-    if (typeof updatesIn.idProof === 'string') finalIdProofUrl = updatesIn.idProof || undefined;
-    else if (updatesIn.idProof instanceof File) finalIdProofUrl = `https://placehold.co/200x150.png?text=${encodeURIComponent(updatesIn.idProof.name.substring(0,10) || 'ID')}_ID`;
-    else finalIdProofUrl = undefined;
+  if (updatesIn.idProof instanceof File) {
+    finalIdProofUrl = await uploadFile(updatesIn.idProof, `libraries/${currentLibraryId}/students/${studentId}/id_proof`);
+  } else if (typeof updatesIn.idProof === 'string') {
+    finalIdProofUrl = updatesIn.idProof || undefined;
   }
-
+  
   const { photo, idProof, amountPaidNow } = updatesIn;
-  const currentFeesDueFromForm = updatesIn.feesDue // This is originalStudentData.feesDue passed from form
+  const currentFeesDueFromForm = updatesIn.feesDue; 
   
   let paymentTypeChargeDelta = 0;
   const newPaymentTypeId = updatesIn.paymentTypeId === '__NONE__' ? undefined : updatesIn.paymentTypeId;
 
   if (newPaymentTypeId && newPaymentTypeId !== originalStudentData.paymentTypeId) {
     const pt = await getPaymentTypeById(currentLibraryId, newPaymentTypeId);
-    if (pt) paymentTypeChargeDelta = pt.amount; 
-  } else if (!newPaymentTypeId && originalStudentData.paymentTypeId) {
-     // If plan removed, no new charge. Consider if existing plan charge needs reversal - currently not handled.
+    if (pt) {
+        // When changing plan, just charge the new plan's amount for the current period.
+        // Retroactive calculation only applies on creation.
+        paymentTypeChargeDelta = pt.amount; 
+    }
   }
 
   const currentBalance = currentFeesDueFromForm ?? originalStudentData.feesDue; 
@@ -367,6 +408,35 @@ export const updateStudent = async (libraryId: string, studentId: string, update
   
   await update(ref(db), dbUpdates);
   return updatedStudentData;
+};
+
+export const deleteStudent = async (libraryId: string, studentId: string): Promise<boolean> => {
+    const currentLibraryId = ensureSingleLibraryId(libraryId, "deleteStudent");
+    const studentRef = ref(db, `libraries/${currentLibraryId}/students/${studentId}`);
+    const studentSnapshot = await get(studentRef);
+
+    if (!studentSnapshot.exists()) return false;
+
+    const studentData = studentSnapshot.val() as Student;
+    const updates: Record<string, any> = {};
+
+    updates[`libraries/${currentLibraryId}/students/${studentId}`] = null;
+
+    if (studentData.seatId) {
+        updates[`libraries/${currentLibraryId}/seats/${studentData.seatId}/isOccupied`] = false;
+        updates[`libraries/${currentLibraryId}/seats/${studentData.seatId}/studentId`] = null;
+        updates[`libraries/${currentLibraryId}/seats/${studentData.seatId}/studentName`] = null;
+    }
+
+    const paymentsSnapshot = await get(query(ref(db, `libraries/${currentLibraryId}/payments`), orderByChild('studentId'), equalTo(studentId)));
+    if (paymentsSnapshot.exists()) {
+        paymentsSnapshot.forEach(child => {
+            updates[`libraries/${currentLibraryId}/payments/${child.key}`] = null;
+        });
+    }
+
+    await update(ref(db), updates);
+    return true;
 };
 
 // Seat Operations

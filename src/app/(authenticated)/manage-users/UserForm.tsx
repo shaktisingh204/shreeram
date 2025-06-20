@@ -12,56 +12,54 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import type { LibraryMetadata, UserMetadata } from "@/types";
 import { useEffect, useState } from "react";
 import { getLibrariesMetadata } from "@/lib/data";
 
-// Schema for editing existing user metadata (UID is present and not changed here)
-const editUserFormSchema = z.object({
-  id: z.string().min(1), // UID from Firebase Auth, present for editing
-  email: z.string().email({ message: "Valid email is required." }),
-  displayName: z.string().min(2, { message: "Full name must be at least 2 characters." }).max(100),
-  mobileNumber: z.string().optional().or(z.literal('')).refine(val => val === '' || val === undefined || /^\d{10}$/.test(val), {
-    message: "Mobile number must be 10 digits if provided.",
-  }),
-  role: z.enum(["manager"]), 
-  assignedLibraryId: z.string().min(1, {message: "A library must be assigned to a manager."}),
-  password: z.string().optional(), // Not used for edit, but part of unified form values
-  confirmPassword: z.string().optional(), // Not used for edit
-});
-
-// Schema for adding a new manager (password is required)
-const addUserFormSchema = z.object({
-  id: z.string().optional(), // Not provided when adding
+const baseUserSchema = z.object({
   email: z.string().email({ message: "Valid email is required." }),
   displayName: z.string().min(2, { message: "Full name must be at least 2 characters." }).max(100),
   mobileNumber: z.string().optional().or(z.literal('')).refine(val => val === '' || val === undefined || /^\d{10}$/.test(val), {
     message: "Mobile number must be 10 digits if provided.",
   }),
   role: z.enum(["manager"]),
-  assignedLibraryId: z.string().min(1, {message: "A library must be assigned to a manager."}),
+  assignedLibraries: z.record(z.boolean()).refine(val => Object.values(val).some(v => v), {
+    message: "At least one library must be assigned to a manager.",
+    path: ["assignedLibraries"],
+  }),
+});
+
+const editUserFormSchema = baseUserSchema.extend({
+  id: z.string().min(1),
+  password: z.string().optional(),
+  confirmPassword: z.string().optional(),
+});
+
+const addUserFormSchema = baseUserSchema.extend({
+  id: z.string().optional(),
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
   confirmPassword: z.string().min(6, { message: "Please confirm the password." }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
-  path: ["confirmPassword"], // path of error
+  path: ["confirmPassword"],
 });
 
 
-export type UserFormValues = z.infer<typeof addUserFormSchema>; // Use the more comprehensive one for form state
+export type UserFormValues = z.infer<typeof addUserFormSchema>;
 
 interface UserFormProps {
-  initialData?: UserMetadata; 
+  initialData?: UserMetadata;
   onSubmit: (values: UserFormValues) => Promise<void>;
   isSubmitting: boolean;
   onCancel: () => void;
   mode: 'add' | 'edit';
-  renderHeader?: boolean; // New prop
+  renderHeader?: boolean;
 }
 
 export function UserForm({ initialData, onSubmit, isSubmitting, onCancel, mode, renderHeader = true }: UserFormProps) {
@@ -74,7 +72,17 @@ export function UserForm({ initialData, onSubmit, isSubmitting, onCancel, mode, 
     }
     fetchLibs();
   }, []);
-  
+
+  const getDefaultAssignedLibs = () => {
+    const assigned: { [key: string]: boolean } = {};
+    if (initialData?.assignedLibraries) {
+        Object.keys(initialData.assignedLibraries).forEach(libId => {
+            assigned[libId] = true;
+        });
+    }
+    return assigned;
+  };
+
   const form = useForm<UserFormValues>({
     resolver: zodResolver(mode === 'add' ? addUserFormSchema : editUserFormSchema),
     defaultValues: initialData ? {
@@ -82,17 +90,17 @@ export function UserForm({ initialData, onSubmit, isSubmitting, onCancel, mode, 
         email: initialData.email,
         displayName: initialData.displayName || "",
         mobileNumber: initialData.mobileNumber || "",
-        role: "manager", 
-        assignedLibraryId: initialData.assignedLibraryId || "",
-        password: "", // Not relevant for edit
-        confirmPassword: "", // Not relevant for edit
+        role: "manager",
+        assignedLibraries: getDefaultAssignedLibs(),
+        password: "",
+        confirmPassword: "",
     } : {
-      id: "", // Will not be used for add
+      id: "",
       email: "",
       displayName: "",
       mobileNumber: "",
       role: "manager",
-      assignedLibraryId: "",
+      assignedLibraries: {},
       password: "",
       confirmPassword: "",
     },
@@ -105,7 +113,7 @@ export function UserForm({ initialData, onSubmit, isSubmitting, onCancel, mode, 
               <CardTitle className="font-headline text-xl text-primary">
               {mode === 'edit' ? "Edit Manager Details" : "Add New Manager"}
               </CardTitle>
-              {mode === 'add' && <p className="text-sm text-muted-foreground pt-1">Create a new manager account and assign them to a library.</p>}
+              {mode === 'add' && <p className="text-sm text-muted-foreground pt-1">Create a new manager account and assign them to one or more libraries.</p>}
           </CardHeader>
         )}
         <Form {...form}>
@@ -133,7 +141,7 @@ export function UserForm({ initialData, onSubmit, isSubmitting, onCancel, mode, 
                     <FormItem>
                     <FormLabel>Manager's Email</FormLabel>
                     <FormControl>
-                        <Input type="email" placeholder="manager@example.com" {...field} />
+                        <Input type="email" placeholder="manager@example.com" {...field} disabled={mode === 'edit'} />
                     </FormControl>
                     <FormMessage />
                     </FormItem>
@@ -197,41 +205,41 @@ export function UserForm({ initialData, onSubmit, isSubmitting, onCancel, mode, 
                 />
                 <FormField
                   control={form.control}
-                  name="assignedLibraryId"
-                  render={({ field }) => (
+                  name="assignedLibraries"
+                  render={() => (
                     <FormItem>
-                      <FormLabel>Assign to Library</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a library" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {libraries.map(lib => (
-                            <SelectItem key={lib.id} value={lib.id}>
-                              {lib.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="mb-4">
+                        <FormLabel className="text-base">Assign to Libraries</FormLabel>
+                        <FormDescription>
+                          Select one or more libraries for this manager to access.
+                        </FormDescription>
+                      </div>
+                      <div className="space-y-2">
+                        {libraries.map((lib) => (
+                          <FormField
+                            key={lib.id}
+                            control={form.control}
+                            name={`assignedLibraries.${lib.id}`}
+                            render={({ field }) => (
+                              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                                <FormLabel className="font-normal">
+                                  {lib.name}
+                                </FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <FormField
-                    control={form.control}
-                    name="role"
-                    render={({ field }) => (
-                        <FormItem className="hidden"> 
-                        <FormLabel>Role</FormLabel>
-                        <FormControl>
-                            <Input {...field} readOnly value="manager" />
-                        </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                 />
             </CardContent>
             <CardFooter className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>

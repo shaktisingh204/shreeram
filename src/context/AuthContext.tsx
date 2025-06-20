@@ -11,7 +11,7 @@ import {
   onAuthStateChanged,
   type User
 } from 'firebase/auth';
-import { getUserMetadata, getLibraryById, getLibrariesMetadata } from '@/lib/data';
+import { getUserMetadata, getLibrariesMetadata } from '@/lib/data';
 import type { UserMetadata, LibraryMetadata } from '@/types';
 
 interface AuthContextType {
@@ -25,7 +25,7 @@ interface AuthContextType {
   currentLibraryName: string | null;
   isSuperAdmin: boolean;
   isManager: boolean;
-  allLibraries: LibraryMetadata[];
+  allLibraries: LibraryMetadata[]; // For SuperAdmin, all libs; for Manager, their assigned libs.
   switchLibraryContext: (newLibraryId: string) => Promise<void>;
   refreshUserAndLibraries: (firebaseUser?: User | null) => Promise<void>;
   isImpersonating: boolean;
@@ -43,97 +43,81 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [isImpersonating, setIsImpersonating] = useState(false);
   const [superAdminOriginalContextId, setSuperAdminOriginalContextId] = useState<string | null>(null);
+  
   const initiallyProcessedUser = useRef(false);
 
   const router = useRouter();
   const pathname = usePathname();
 
-  const _isSuperAdmin = (metadata: UserMetadata | null) => metadata?.role === 'superadmin';
-  const _isManager = (metadata: UserMetadata | null) => metadata?.role === 'manager';
+  const _isSuperAdmin = useCallback((metadata: UserMetadata | null) => metadata?.role === 'superadmin', []);
+  const _isManager = useCallback((metadata: UserMetadata | null) => metadata?.role === 'manager', []);
 
-  const fetchAndSetLibraryName = useCallback(async (libraryId: string | null) => {
-    if (libraryId === null) {
-      setCurrentLibraryName("All Libraries");
-      return;
-    }
-    if (libraryId) {
-      const library = await getLibraryById(libraryId);
-      const nameToSet = library?.name || 'Unknown Library';
-      setCurrentLibraryName(nameToSet);
-    } else {
-      setCurrentLibraryName(null);
-    }
+  const fetchAndSetLibraryName = useCallback(async (libraryId: string | null, allLibsForContext: LibraryMetadata[]) => {
+      if (libraryId === null) {
+          setCurrentLibraryName("All Libraries");
+          return;
+      }
+      if (libraryId) {
+          const library = allLibsForContext.find(lib => lib.id === libraryId);
+          const nameToSet = library?.name || 'Unknown Library';
+          setCurrentLibraryName(nameToSet);
+      } else {
+          setCurrentLibraryName(null);
+      }
   }, []);
 
   const refreshUserAndLibraries = useCallback(async (firebaseUserParam?: User | null) => {
     const currentUserToProcess = firebaseUserParam === undefined ? user : firebaseUserParam;
-    console.log('[AuthContext] refreshUserAndLibraries: Called. User to process:', currentUserToProcess?.uid, 'Was impersonating:', isImpersonating, 'Original context:', superAdminOriginalContextId);
 
     if (currentUserToProcess) {
-      try {
-        const metadata = await getUserMetadata(currentUserToProcess.uid);
-        console.log('[AuthContext] refreshUserAndLibraries: Fetched user metadata:', metadata);
-        setUserMetadata(metadata);
-        let newContextToSet = currentLibraryId;
+        try {
+            const metadata = await getUserMetadata(currentUserToProcess.uid);
+            setUserMetadata(metadata);
+            
+            let libsForContext: LibraryMetadata[] = [];
+            let newContextToSet: string | null = null;
+            
+            if (_isSuperAdmin(metadata)) {
+                libsForContext = await getLibrariesMetadata();
+                setAllLibraries(libsForContext);
 
-        if (_isManager(metadata) && metadata.assignedLibraryId) {
-          console.log(`[AuthContext] refreshUserAndLibraries: User is Manager. Assigned Library ID: ${metadata.assignedLibraryId}`);
-          newContextToSet = metadata.assignedLibraryId;
-          if(isImpersonating) setIsImpersonating(false);
-        } else if (_isSuperAdmin(metadata)) {
-          console.log(`[AuthContext] refreshUserAndLibraries: User is Superadmin.`);
-          const libs = await getLibrariesMetadata();
-          setAllLibraries(libs);
+                // Preserve context on refresh unless it's invalid
+                const currentContextIsValid = libsForContext.some(lib => lib.id === currentLibraryId);
+                newContextToSet = isImpersonating && currentContextIsValid ? currentLibraryId : null;
+                
+            } else if (_isManager(metadata) && metadata.assignedLibraries) {
+                const assignedIds = Object.keys(metadata.assignedLibraries);
+                const allSystemLibs = await getLibrariesMetadata();
+                libsForContext = allSystemLibs.filter(lib => assignedIds.includes(lib.id));
+                setAllLibraries(libsForContext);
 
-          if (!initiallyProcessedUser.current && firebaseUserParam) {
-            console.log("[AuthContext] Superadmin: Fresh login. Setting to 'All Libraries' view.");
-            newContextToSet = null;
-            setIsImpersonating(false);
-            setSuperAdminOriginalContextId(null);
-          } else if (isImpersonating) {
-            console.log(`[AuthContext] Superadmin: Refresh while impersonating. Current impersonated library: ${currentLibraryId}`);
-            newContextToSet = currentLibraryId;
-          } else {
-            console.log(`[AuthContext] Superadmin: Refresh, not impersonating. Context should be original: ${superAdminOriginalContextId}`);
-            newContextToSet = superAdminOriginalContextId;
-          }
+                if(libsForContext.length > 0) {
+                    const currentContextIsValid = libsForContext.some(lib => lib.id === currentLibraryId);
+                    newContextToSet = currentContextIsValid ? currentLibraryId : libsForContext[0].id;
+                } else {
+                    newContextToSet = null; // Manager has no valid assigned libraries
+                }
+            } else {
+                 setAllLibraries([]);
+            }
 
-          if (libs.length === 0) {
-            newContextToSet = null;
-            if(isImpersonating) setIsImpersonating(false);
-          } else if (newContextToSet && !libs.find(lib => lib.id === newContextToSet)) {
-            console.warn(`[AuthContext] Superadmin's context library ID ${newContextToSet} not found among available libraries. Falling back to 'All Libraries'.`);
-            newContextToSet = null;
-            if(isImpersonating) setIsImpersonating(false);
-          }
-        } else {
-          console.warn('[AuthContext] refreshUserAndLibraries: User not manager/superadmin or missing library assignment. Metadata:', metadata);
-          newContextToSet = null;
-          if(isImpersonating) setIsImpersonating(false);
+            setCurrentLibraryId(newContextToSet);
+            await fetchAndSetLibraryName(newContextToSet, libsForContext.length > 0 ? libsForContext : await getLibrariesMetadata());
+            
+        } catch (error) {
+            console.error("[AuthContext] refreshUserAndLibraries: Error:", error);
+            setUserMetadata(null); setCurrentLibraryId(null); setCurrentLibraryName(null); setAllLibraries([]); setIsImpersonating(false);
         }
-
-        setCurrentLibraryId(newContextToSet);
-        await fetchAndSetLibraryName(newContextToSet);
-
-      } catch (error) {
-        console.error("[AuthContext] refreshUserAndLibraries: Error:", error);
-        setUserMetadata(null); setCurrentLibraryId(null); setCurrentLibraryName(null); setAllLibraries([]); setIsImpersonating(false);
-      }
     } else {
-      console.log('[AuthContext] refreshUserAndLibraries: No user authenticated.');
-      setUserMetadata(null); setCurrentLibraryId(null); setCurrentLibraryName(null); setAllLibraries([]); setIsImpersonating(false); setSuperAdminOriginalContextId(null);
+        setUserMetadata(null); setCurrentLibraryId(null); setCurrentLibraryName(null); setAllLibraries([]);
+        setIsImpersonating(false); setSuperAdminOriginalContextId(null);
+        initiallyProcessedUser.current = false;
     }
-
-    if (firebaseUserParam && !initiallyProcessedUser.current) {
-        initiallyProcessedUser.current = true;
-    }
-  }, [user, fetchAndSetLibraryName, currentLibraryId, isImpersonating, superAdminOriginalContextId]);
+  }, [user, currentLibraryId, isImpersonating, _isSuperAdmin, _isManager, fetchAndSetLibraryName]);
 
 
   useEffect(() => {
-    console.log('[AuthContext] useEffect: Running onAuthStateChanged setup.');
     const unsubscribe = onAuthStateChanged(auth, async (currentUserAuth) => {
-      console.log('[AuthContext] onAuthStateChanged: Fired. currentUserAuth:', currentUserAuth ? currentUserAuth.uid : 'null', 'Current pathname:', pathname);
       setLoading(true);
       setUser(currentUserAuth);
 
@@ -143,6 +127,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           router.push('/dashboard');
         }
       } else {
+        // Clear all state on logout
         setUserMetadata(null); setCurrentLibraryId(null); setCurrentLibraryName(null); setAllLibraries([]);
         setIsImpersonating(false); setSuperAdminOriginalContextId(null);
         initiallyProcessedUser.current = false;
@@ -152,20 +137,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       setLoading(false);
     });
-    return () => {
-      console.log('[AuthContext] useEffect: Unsubscribing from onAuthStateChanged.');
-      unsubscribe();
-    };
-  }, [refreshUserAndLibraries, router, pathname]);
-
+    return () => unsubscribe();
+  }, []); // Only run once on mount
 
   const login = async (email: string, password_input: string): Promise<boolean> => {
-    console.log(`[AuthContext] login: Attempting login for email: ${email}`);
     setLoading(true);
     initiallyProcessedUser.current = false;
     try {
       await signInWithEmailAndPassword(auth, email, password_input);
-      console.log(`[AuthContext] login: Firebase signInWithEmailAndPassword successful for ${email}. onAuthStateChanged will handle next steps.`);
+      // onAuthStateChanged will handle the rest
       return true;
     } catch (error) {
       console.error("[AuthContext] login: Firebase Authentication Error:", error);
@@ -175,46 +155,48 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = async () => {
-    console.log('[AuthContext] logout: Attempting sign out.');
     setLoading(true);
     try {
       await signOut(auth);
+       // onAuthStateChanged will handle the rest
     } catch (error) {
       console.error("[AuthContext] logout: Error signing out:", error);
       setLoading(false);
     }
   };
 
-  const switchLibraryContext = useCallback(async (newManagerLibraryId: string) => {
-    if (_isSuperAdmin(userMetadata)) {
-      console.log(`[AuthContext] switchLibraryContext: Superadmin attempting to switch to library ID: ${newManagerLibraryId}. Currently impersonating: ${isImpersonating}. Original context was: ${superAdminOriginalContextId}. Current context: ${currentLibraryId}`);
-      const libraryToImpersonate = allLibraries.find(lib => lib.id === newManagerLibraryId);
-      if (libraryToImpersonate) {
-        if (!isImpersonating) {
-          console.log(`[AuthContext] switchLibraryContext: Starting new impersonation. Storing current context (${currentLibraryId}) as original.`);
-          setSuperAdminOriginalContextId(currentLibraryId);
+  const switchLibraryContext = useCallback(async (newLibraryId: string) => {
+    const metadata = userMetadata;
+    const isSA = _isSuperAdmin(metadata);
+    const isMgr = _isManager(metadata);
+    
+    let canSwitch = false;
+    if (isSA) {
+        canSwitch = true; 
+        if (!isImpersonating) { // Starting a new impersonation
+            setSuperAdminOriginalContextId(currentLibraryId);
         }
-        setCurrentLibraryId(newManagerLibraryId);
-        setCurrentLibraryName(libraryToImpersonate.name);
         setIsImpersonating(true);
-        console.log(`[AuthContext] switchLibraryContext: Switched. New currentLibraryId: ${newManagerLibraryId}, isImpersonating: true. Original context ID stored: ${superAdminOriginalContextId}`);
-      } else {
-        console.warn(`[AuthContext] switchLibraryContext: Library ID ${newManagerLibraryId} not found in allLibraries. No switch performed.`);
-      }
-    } else {
-      console.warn("[AuthContext] switchLibraryContext: Only superadmins can switch library context.");
+    } else if (isMgr && metadata?.assignedLibraries && metadata.assignedLibraries[newLibraryId]) {
+        canSwitch = true;
     }
-  }, [userMetadata, allLibraries, currentLibraryId, isImpersonating, superAdminOriginalContextId]);
+
+    if (canSwitch) {
+        setCurrentLibraryId(newLibraryId);
+        const allSystemLibs = await getLibrariesMetadata();
+        await fetchAndSetLibraryName(newLibraryId, allSystemLibs);
+    } else {
+        console.warn(`[AuthContext] User does not have permission to switch to library ID: ${newLibraryId}`);
+    }
+  }, [userMetadata, _isSuperAdmin, _isManager, fetchAndSetLibraryName, isImpersonating, currentLibraryId]);
 
   const revertToSuperAdminView = useCallback(async () => {
     if (_isSuperAdmin(userMetadata) && isImpersonating) {
-      console.log(`[AuthContext] revertToSuperAdminView: Reverting to original context ID: ${superAdminOriginalContextId}`);
-      setCurrentLibraryId(superAdminOriginalContextId);
-      await fetchAndSetLibraryName(superAdminOriginalContextId);
+      setCurrentLibraryId(null);
+      await fetchAndSetLibraryName(null, await getLibrariesMetadata());
       setIsImpersonating(false);
-      console.log(`[AuthContext] revertToSuperAdminView: Reverted. currentLibraryId: ${superAdminOriginalContextId}, isImpersonating: false.`);
     }
-  }, [userMetadata, isImpersonating, superAdminOriginalContextId, fetchAndSetLibraryName]);
+  }, [userMetadata, _isSuperAdmin, isImpersonating, fetchAndSetLibraryName]);
 
   const isAuthenticated = !!user;
 

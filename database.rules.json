@@ -6,16 +6,13 @@
     "users_metadata": {
       ".read": "auth != null",
       "$uid": {
-        // Allow user to read their own metadata
-        // Allow superadmin to read/write any user's metadata
         ".read": "$uid === auth.uid || root.child('users_metadata').child(auth.uid).child('role').val() === 'superadmin'",
         ".write": "root.child('users_metadata').child(auth.uid).child('role').val() === 'superadmin'",
-        ".validate": "newData.hasChildren(['id', 'email', 'role']) && newData.child('id').isString() && newData.child('email').isString() && (newData.child('role').val() === 'manager' || newData.child('role').val() === 'superadmin') && (newData.child('role').val() === 'superadmin' || (newData.child('role').val() === 'manager' && newData.hasChild('assignedLibraryId') && newData.child('assignedLibraryId').isString() && newData.hasChild('assignedLibraryName') && newData.child('assignedLibraryName').isString()))"
+        ".validate": "newData.hasChildren(['id', 'email', 'role']) && newData.child('id').isString() && newData.child('email').isString() && (newData.child('role').val() === 'manager' || newData.child('role').val() === 'superadmin') && (newData.child('role').val() === 'superadmin' || (newData.child('role').val() === 'manager' && newData.hasChild('assignedLibraries')))"
       }
     },
     "libraries_metadata": {
       ".read": "auth != null",
-      // Only superadmin can write to library metadata
       ".write": "auth != null && root.child('users_metadata').child(auth.uid).child('role').val() === 'superadmin'",
       "$libraryMetaId": {
         ".validate": "newData.hasChildren(['id', 'name', 'createdAt']) && newData.child('id').isString() && newData.child('name').isString() && newData.child('createdAt').isString()"
@@ -24,35 +21,32 @@
     },
     "libraries": {
       "$libraryId": {
-        // Superadmin can read/write any library's data
-        // Manager can read/write their assigned library's data
-        ".read": "auth != null && (root.child('users_metadata').child(auth.uid).child('role').val() === 'superadmin' || (root.child('users_metadata').child(auth.uid).child('role').val() === 'manager' && root.child('users_metadata').child(auth.uid).child('assignedLibraryId').val() === $libraryId))",
-        ".write": "auth != null && (root.child('users_metadata').child(auth.uid).child('role').val() === 'superadmin' || (root.child('users_metadata').child(auth.uid).child('role').val() === 'manager' && root.child('users_metadata').child(auth.uid).child('assignedLibraryId').val() === $libraryId))",
+        ".read": "auth != null && (root.child('users_metadata').child(auth.uid).child('role').val() === 'superadmin' || (root.child('users_metadata').child(auth.uid).child('role').val() === 'manager' && root.child('users_metadata').child(auth.uid).child('assignedLibraries').child($libraryId).exists()))",
+        ".write": "auth != null && (root.child('users_metadata').child(auth.uid).child('role').val() === 'superadmin' || (root.child('users_metadata').child(auth.uid).child('role').val() === 'manager' && root.child('users_metadata').child(auth.uid).child('assignedLibraries').child($libraryId).exists()))",
         "students": {
            ".indexOn": ["status", "fullName"]
-          // Example validation for student data:
-          // "$studentId": {
-          //   ".validate": "newData.hasChildren(['fullName', 'contactDetails', 'status', 'feesDue', 'enrollmentDate']) && newData.child('fullName').isString() && newData.child('contactDetails').isString() && newData.child('status').isString() && newData.child('feesDue').isNumber() && newData.child('enrollmentDate').isString() && (!newData.hasChild('mobileNumber') || newData.child('mobileNumber').isString()) && (!newData.hasChild('fatherName') || newData.child('fatherName').isString()) && (!newData.hasChild('address') || newData.child('address').isString()) && (!newData.hasChild('photoUrl') || newData.child('photoUrl').isString()) && (!newData.hasChild('idProofUrl') || newData.child('idProofUrl').isString()) && (!newData.hasChild('notes') || newData.child('notes').isString()) && (!newData.hasChild('seatId') || newData.child('seatId').isString()) && (!newData.hasChild('paymentTypeId') || newData.child('paymentTypeId').isString())"
-          // }
         },
         "seats": {
           ".indexOn": ["floor", "seatNumber"]
-          // Example validation for seat data:
-          // "$seatId": {
-          //   ".validate": "newData.hasChildren(['seatNumber', 'floor', 'isOccupied']) && newData.child('seatNumber').isString() && newData.child('floor').isString() && newData.child('isOccupied').isBoolean() && (!newData.hasChild('studentId') || newData.child('studentId').isString()) && (!newData.hasChild('studentName') || newData.child('studentName').isString())"
-          // }
         },
-        "paymentTypes": {
-          // Example validation for payment type data:
-          // "$paymentTypeId": {
-          //   ".validate": "newData.hasChildren(['name', 'amount', 'frequency']) && newData.child('name').isString() && newData.child('amount').isNumber() && newData.child('frequency').isString()"
-          // }
-        },
-        "payments": {
-          // Example validation for payment data:
-          // "$paymentId": {
-          //   ".validate": "newData.hasChildren(['studentId', 'amount', 'paymentDate']) && newData.child('studentId').isString() && newData.child('amount').isNumber() && newData.child('paymentDate').isString() && (!newData.hasChild('studentName') || newData.child('studentName').isString()) && (!newData.hasChild('notes') || newData.child('notes').isString())"
-          // }
+        "paymentTypes": {},
+        "payments": {}
+      }
+    },
+    "storage": {
+      "$bucket": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "libraries": {
+          "$libraryId": {
+            "students": {
+              "$studentId": {
+                "$fileName": {
+                  ".write": "request.resource.size < 5 * 1024 * 1024 && (request.resource.contentType.matches('image/.*') || request.resource.contentType.matches('application/pdf'))"
+                }
+              }
+            }
+          }
         }
       }
     },

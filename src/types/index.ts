@@ -71,6 +71,5 @@ export interface UserMetadata {
   role: 'superadmin' | 'manager';
   displayName?: string;
   mobileNumber?: string;
-  assignedLibraryId?: string; 
-  assignedLibraryName?: string; 
+  assignedLibraries?: { [id: string]: string }; // Maps library ID to library name
 }
