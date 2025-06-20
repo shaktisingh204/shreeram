@@ -15,7 +15,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription as UiCardDescription } from "@/components/ui/card";
 import { Loader2, Upload } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -113,7 +113,7 @@ export function BrandingSettingsForm() {
     <Card className="shadow-lg">
       <CardHeader>
         <CardTitle>Branding Settings</CardTitle>
-        <FormDescription>Customize the application's logo.</FormDescription>
+        <UiCardDescription>Customize the application's logo.</UiCardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(handleSubmit)}>
