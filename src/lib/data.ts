@@ -20,7 +20,6 @@ const snapshotToAray = <T>(snapshot: any, libraryId?: string, libraryName?: stri
 
 // --- File Upload ---
 const uploadFile = async (file: File, path: string): Promise<string> => {
-    // IMPORTANT: Replace this with the actual URL to your PHP upload script
     const uploadEndpoint = 'https://images.shreerameducation.com/upload.php';
 
     const formData = new FormData();
@@ -262,19 +261,19 @@ export const addStudent = async (libraryId: string, studentData: StudentDataInpu
 
   const newStudentPartialData: Omit<Student, 'id' | 'libraryName' | 'libraryId'> = {
     fullName: studentData.fullName,
-    aadhaarNumber: studentData.aadhaarNumber || undefined,
-    mobileNumber: studentData.mobileNumber || undefined,
-    fatherName: studentData.fatherName || undefined,
-    address: studentData.address || undefined,
-    notes: studentData.notes || undefined,
-    seatId: studentData.seatId === '__NONE__' ? undefined : studentData.seatId,
+    aadhaarNumber: studentData.aadhaarNumber || null,
+    mobileNumber: studentData.mobileNumber || null,
+    fatherName: studentData.fatherName || null,
+    address: studentData.address || null,
+    notes: studentData.notes || null,
+    seatId: (studentData.seatId === '__NONE__' ? null : studentData.seatId) || null,
     enrollmentDate: enrollmentDate,
-    paymentTypeId: studentPaymentTypeId,
-    photoUrl: finalPhotoUrl,
-    idProofUrl: finalIdProofUrl,
+    paymentTypeId: studentPaymentTypeId || null,
+    photoUrl: finalPhotoUrl || null,
+    idProofUrl: finalIdProofUrl || null,
     feesDue: netBalance,
     status: finalStatus,
-    lastPaymentDate: amountPaidNow > 0 ? new Date().toISOString().split('T')[0] : undefined,
+    lastPaymentDate: amountPaidNow > 0 ? new Date().toISOString().split('T')[0] : null,
   };
   
   const studentToSave: Student = {
@@ -298,11 +297,11 @@ export const addStudent = async (libraryId: string, studentData: StudentDataInpu
         updates[`libraries/${currentLibraryId}/seats/${studentToSave.seatId}/studentId`] = newStudentId;
         updates[`libraries/${currentLibraryId}/seats/${studentToSave.seatId}/studentName`] = studentToSave.fullName;
     } else {
-        studentToSave.seatId = undefined; 
+        studentToSave.seatId = null; 
         updates[`libraries/${currentLibraryId}/students/${newStudentId}/seatId`] = null; 
     }
   } else {
-     studentToSave.seatId = undefined; 
+     studentToSave.seatId = null; 
      updates[`libraries/${currentLibraryId}/students/${newStudentId}/seatId`] = null;
   }
 
@@ -328,18 +327,18 @@ export const updateStudent = async (libraryId: string, studentId: string, update
 
   const originalStudentData = { id: studentId, ...studentSnapshot.val() } as Student;
   
-  let finalPhotoUrl: string | undefined = originalStudentData.photoUrl;
+  let finalPhotoUrl: string | null = originalStudentData.photoUrl || null;
   if (updatesIn.photo instanceof File) {
     finalPhotoUrl = await uploadFile(updatesIn.photo, `libraries/${currentLibraryId}/students/${studentId}/photo`);
   } else if (typeof updatesIn.photo === 'string') {
-    finalPhotoUrl = updatesIn.photo || undefined;
+    finalPhotoUrl = updatesIn.photo || null;
   }
 
-  let finalIdProofUrl: string | undefined = originalStudentData.idProofUrl;
+  let finalIdProofUrl: string | null = originalStudentData.idProofUrl || null;
   if (updatesIn.idProof instanceof File) {
     finalIdProofUrl = await uploadFile(updatesIn.idProof, `libraries/${currentLibraryId}/students/${studentId}/id_proof`);
   } else if (typeof updatesIn.idProof === 'string') {
-    finalIdProofUrl = updatesIn.idProof || undefined;
+    finalIdProofUrl = updatesIn.idProof || null;
   }
   
   const { photo, idProof, amountPaidNow } = updatesIn;
@@ -351,13 +350,11 @@ export const updateStudent = async (libraryId: string, studentId: string, update
   if (newPaymentTypeId && newPaymentTypeId !== originalStudentData.paymentTypeId) {
     const pt = await getPaymentTypeById(currentLibraryId, newPaymentTypeId);
     if (pt) {
-        // When changing plan, just charge the new plan's amount for the current period.
-        // Retroactive calculation only applies on creation.
         paymentTypeChargeDelta = pt.amount; 
     }
   }
 
-  const currentBalance = currentFeesDueFromForm ?? originalStudentData.feesDue; 
+  const currentBalance = currentFeesDueFromForm ?? originalStudentData.feesDue ?? 0;
   const netBalance = currentBalance + paymentTypeChargeDelta - amountPaidNow;
   
   let finalStatus = updatesIn.status;
@@ -368,19 +365,19 @@ export const updateStudent = async (libraryId: string, studentId: string, update
   const updatedStudentData: Student = { 
     ...originalStudentData, 
     fullName: updatesIn.fullName,
-    aadhaarNumber: updatesIn.aadhaarNumber === "" ? undefined : (updatesIn.aadhaarNumber ?? originalStudentData.aadhaarNumber),
-    mobileNumber: updatesIn.mobileNumber === "" ? undefined : (updatesIn.mobileNumber ?? originalStudentData.mobileNumber),
-    fatherName: updatesIn.fatherName === "" ? undefined : (updatesIn.fatherName ?? originalStudentData.fatherName),
-    address: updatesIn.address === "" ? undefined : (updatesIn.address ?? originalStudentData.address),
-    notes: updatesIn.notes === "" ? undefined : (updatesIn.notes ?? originalStudentData.notes),
+    aadhaarNumber: updatesIn.aadhaarNumber || null,
+    mobileNumber: updatesIn.mobileNumber || null,
+    fatherName: updatesIn.fatherName || null,
+    address: updatesIn.address || null,
+    notes: updatesIn.notes || null,
     enrollmentDate: updatesIn.enrollmentDate,
     status: finalStatus,
     photoUrl: finalPhotoUrl,
     idProofUrl: finalIdProofUrl,
     feesDue: netBalance,
-    lastPaymentDate: amountPaidNow > 0 ? new Date().toISOString().split('T')[0] : originalStudentData.lastPaymentDate,
-    paymentTypeId: newPaymentTypeId,
-    seatId: updatesIn.seatId === '__NONE__' ? undefined : (updatesIn.seatId ?? originalStudentData.seatId),
+    lastPaymentDate: amountPaidNow > 0 ? new Date().toISOString().split('T')[0] : (originalStudentData.lastPaymentDate || null),
+    paymentTypeId: newPaymentTypeId || null,
+    seatId: (updatesIn.seatId === '__NONE__' ? null : updatesIn.seatId) || null,
     libraryId: currentLibraryId,
     libraryName: originalStudentData.libraryName || (await getLibraryById(currentLibraryId))?.name,
   };
@@ -408,11 +405,11 @@ export const updateStudent = async (libraryId: string, studentId: string, update
         dbUpdates[`libraries/${currentLibraryId}/seats/${newSeatIdForUpdate}/studentId`] = studentId;
         dbUpdates[`libraries/${currentLibraryId}/seats/${newSeatIdForUpdate}/studentName`] = updatedStudentData.fullName;
       } else {
-         updatedStudentData.seatId = undefined;
+         updatedStudentData.seatId = null;
          dbUpdates[`libraries/${currentLibraryId}/students/${studentId}/seatId`] = null; 
       }
     } else {
-        updatedStudentData.seatId = undefined;
+        updatedStudentData.seatId = null;
         dbUpdates[`libraries/${currentLibraryId}/students/${studentId}/seatId`] = null; 
     }
   } else if (newSeatIdForUpdate && updatesIn.fullName !== originalStudentData.fullName) { 
