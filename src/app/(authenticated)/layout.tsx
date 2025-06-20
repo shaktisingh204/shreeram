@@ -14,10 +14,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuPortal,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
@@ -39,8 +35,12 @@ function LibrarySwitcher() {
     }
   };
 
+  // Show switcher for SA, or for Managers who have more than one library.
   const showSwitcher = isSuperAdmin || (isManager && allLibraries.length > 1);
   if (!showSwitcher) return null;
+  
+  if (isManager && allLibraries.length <= 1) return null;
+
 
   return (
      <DropdownMenu>
@@ -48,7 +48,7 @@ function LibrarySwitcher() {
             <Button variant="outline" className="w-48 justify-between">
                 <div className="flex items-center truncate">
                     <Library className="mr-2 h-4 w-4" />
-                    <span className="truncate">{currentLibraryName || "Select a Library"}</span>
+                    <span className="truncate">{currentLibraryName || "Select Library"}</span>
                 </div>
                 <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
             </Button>

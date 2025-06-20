@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { DashboardCard } from '@/components/DashboardCard';
 import { getDashboardSummary, getUsersMetadata } from '@/lib/data';
 import type { DashboardSummary, UserMetadata } from '@/types';
-import { Users, Armchair, TrendingUp, AlertTriangle, DollarSign, Loader2, LogIn, Library as LibraryIcon, EyeOff } from 'lucide-react';
+import { Users, Armchair, TrendingUp, AlertTriangle, DollarSign, Loader2, LogIn, Library as LibraryIcon, EyeOff, Building } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAuth } from '@/context/AuthContext';
@@ -33,7 +33,7 @@ export default function DashboardPage() {
   const [loadingData, setLoadingData] = useState(true);
   const [loadingManagers, setLoadingManagers] = useState(false);
 
-  const pageTitle = currentLibraryName || (isSuperAdmin && !currentLibraryId ? "All Libraries Overview" : "Overview");
+  const pageTitle = currentLibraryName || (isSuperAdmin && !currentLibraryId ? "All Libraries Overview" : (isManager && !currentLibraryId ? "Select a Library" : "Overview"));
 
   useEffect(() => {
     const fetchData = async () => {
@@ -43,6 +43,13 @@ export default function DashboardPage() {
         return;
       }
 
+      // Do not fetch summary if a manager hasn't selected a library yet
+      if (isManager && !currentLibraryId) {
+          setLoadingData(false);
+          setSummary(null);
+          return;
+      }
+      
       const libraryIdForSummary = currentLibraryId;
 
       setLoadingData(true); 
@@ -64,7 +71,7 @@ export default function DashboardPage() {
         setLoadingManagers(true);
         try {
           const allUsers = await getUsersMetadata();
-          setManagers(allUsers.filter(u => u.role === 'manager' && u.assignedLibraryId && u.assignedLibraryName));
+          setManagers(allUsers.filter(u => u.role === 'manager' && u.assignedLibraries && Object.keys(u.assignedLibraries).length > 0));
         } catch (error) {
           console.error("Failed to fetch managers:", error);
           setManagers([]);
@@ -77,9 +84,14 @@ export default function DashboardPage() {
   }, [currentLibraryId, authLoading, isSuperAdmin, isManager, user, userMetadata]);
 
   const handleImpersonateManager = async (manager: UserMetadata) => {
-    if (!isSuperAdmin || !manager.assignedLibraryId) return;
+    if (!isSuperAdmin || !manager.assignedLibraries) return;
+    const firstLibId = Object.keys(manager.assignedLibraries)[0];
+    if(!firstLibId) {
+        console.error("Manager has no assigned libraries to impersonate.");
+        return;
+    }
     try {
-      await switchLibraryContext(manager.assignedLibraryId);
+      await switchLibraryContext(firstLibId);
     } catch (error) {
       console.error("Failed to switch context for manager impersonation:", error);
     }
@@ -92,7 +104,7 @@ export default function DashboardPage() {
   const chartData = summary ? [{ name: pageTitle, earnings: summary.monthlyIncome }] : [];
 
 
-  if (authLoading || loadingData || (isSuperAdmin && loadingManagers && !isImpersonating)) {
+  if (authLoading || (loadingData && currentLibraryId) || (isSuperAdmin && loadingManagers && !isImpersonating)) {
     return (
       <div className="flex justify-center items-center h-full">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -100,13 +112,27 @@ export default function DashboardPage() {
     );
   }
   
-  if (isManager && !currentLibraryId && user) {
+  if (isManager && !currentLibraryId) {
+     if (allLibraries.length > 1) {
+         return (
+            <div className="flex flex-col justify-center items-center h-full text-center p-4">
+                <Building className="h-16 w-16 text-primary mb-4" />
+                <p className="text-2xl font-semibold text-primary">Welcome, Manager!</p>
+                <p className="text-muted-foreground mt-2">
+                You have access to multiple libraries.
+                </p>
+                <p className="text-md text-muted-foreground mt-3">
+                Please select a library from the dropdown in the header to view its dashboard.
+                </p>
+            </div>
+         );
+     }
      return (
       <div className="flex flex-col justify-center items-center h-full text-center p-4">
         <AlertTriangle className="h-16 w-16 text-destructive mb-4" />
         <p className="text-2xl font-semibold text-destructive">Configuration Incomplete</p>
         <p className="text-muted-foreground mt-2">
-          Your manager account is authenticated, but essential configuration (like library assignment) is missing.
+          Your manager account is not assigned to any libraries.
         </p>
          <p className="text-sm text-muted-foreground mt-3">
           Please contact your superadmin for assistance.
@@ -293,10 +319,10 @@ function ManagerContextSwitcherCard({ managers, onImpersonate, isLoading }: Mana
                     <p className="font-semibold text-foreground">{manager.displayName}</p>
                     <p className="text-sm text-muted-foreground flex items-center mt-0.5">
                       <LibraryIcon className="h-3.5 w-3.5 mr-1.5 text-accent"/>
-                      {manager.assignedLibraryName || "N/A"}
+                      {manager.assignedLibraries ? Object.values(manager.assignedLibraries).join(', ') : "N/A"}
                     </p>
                   </div>
-                  {manager.assignedLibraryId && (
+                  {manager.assignedLibraries && Object.keys(manager.assignedLibraries).length > 0 && (
                     <Button 
                       variant="outline" 
                       size="sm" 
